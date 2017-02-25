@@ -71,23 +71,25 @@ public class IndexHandler
 
         String homeDir = System.getProperty("user.home");
 
-        getURIForAllLetters(documentPointers, homeDir + "/Documents/Tolstoy/unzipLettersSpecial/pisma_k_Sofie_83-84(1)", true);
-        Person person = new Person();
-        person.setLastName("Толстой");
-        person.setFirstName("Софье");
-        person.setPaternalName("Андреевне");
+//        getURIForAllLetters(documentPointers, homeDir + "/Documents/Tolstoy/unzipLettersSpecial/pisma_k_Sofie_83-84(1)", true);
+//        Person person = new Person();
+//        person.setLastName("Толстая");
+//        person.setFirstName("Софья");
+//        person.setPaternalName("Андреевна");
+//        person.setOriginalEntry("Толстой Софье Андрееевне");
 
 
 //        getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLettersSpecial/Pisma_k_Chertkovu_toma_87-89", true);
 //        getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLettersSpecial/Pisma_k_Chertkovu_toma_87-89", true);
 //        Person person = new Person();
-//        person.setLastName("Черткову");
-//        person.setFirstName("В");
-//        person.setPaternalName("Г");
+//        person.setLastName("Чертков");
+//        person.setFirstName("Владимир");
+//        person.setPaternalName("Григорьевич");
+//        person.setOriginalEntry("Черткову В.Г.");
 
 
-//        getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLetters", false);
-//        Person person = null;
+        getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLetters", false);
+        Person person = null;
 
 
         for (DocumentPointer pointer : documentPointers)

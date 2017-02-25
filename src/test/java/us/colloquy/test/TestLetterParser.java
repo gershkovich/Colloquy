@@ -36,6 +36,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Created by Peter Gershkovich on 9/10/16.
@@ -142,6 +144,9 @@ public class TestLetterParser
         }
 
 
+        Pattern pattern =
+                Pattern.compile("([a-zA-Z]+\\s?)");
+
 
         ObjectWriter ow = new com.fasterxml.jackson.databind.ObjectMapper().writer().withDefaultPrettyPrinter();
 //
@@ -164,9 +169,26 @@ public class TestLetterParser
                     e.printStackTrace();
                 }
 
-                System.out.println(json);
+              //  System.out.println(json);
+
+              //  System.out.println("Content: " + letter.getContent());
 //                        }
+
+                Matcher m = pattern.matcher(letter.getContent());
+
+                StringBuffer sb = new StringBuffer();
+
+                while (m.find()) {
+
+
+                    m.appendReplacement(sb, "{" + m.group(1) + "}");
+                }
+                m.appendTail(sb);
+
+                System.out.println("Content: " + sb.toString());
             }
+
+
             //}
 
         }
@@ -193,4 +215,46 @@ public class TestLetterParser
     }
 
 
+    @Test
+    public void testUnderlineEngLetter() throws Exception
+    {
+        Pattern patternToWhomLetterMissmatch =
+                Pattern.compile("(\\d{1,4})\\.\\s{1,2}([\\p{IsCyrillic}HAETOPKXCBM]*)\\.\\s{1,3}([\\p{IsCyrillic}HAETOPKXCBM]*)\\.\\s{1,2}" +
+                        "([\\p{IsCyrillic}]*)(.*)");
+
+        Pattern pattern =
+                Pattern.compile("([a-zA-Z]+\\s?)");
+
+        String testSt = "Владимир Васильевич,\n" +
+                "Очень рады будем вашему приезду, а также милого Ильяса.1 Только, пожалуйста, известите за день до вашего отъезда из Петерб[урга], чтобы мы могли приготовить, что нужно.\n" +
+                "Как хорошо, что здоровье ваше справилось.\n" +
+                "Так до свиданья.2\n" +
+                "Лев Толстой.\n" +
+                "25 дек. 1904.\n" +
+                "На обороте секретки: Петербург, Владимиру Васильевичу Стасову, Публичная библиотека.";
+
+
+
+
+        String line = "Владимир Васильевич this is great Владимир Васильевич\n test Владимир Васильевич another one";
+
+        Matcher m = pattern.matcher(line);
+
+        int i = 0;
+
+        StringBuffer sb = new StringBuffer();
+
+        while (m.find()) {
+            System.out.println();
+          //  System.out.println(m.group(2));
+            i ++;
+            m.appendReplacement(sb, "{" + m.group(1) + "}");
+        }
+        m.appendTail(sb);
+
+        System.out.println(sb);
+
+
+
+    }
 }

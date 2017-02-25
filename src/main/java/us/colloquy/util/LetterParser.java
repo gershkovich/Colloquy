@@ -213,8 +213,20 @@ public class LetterParser
 
                         } else
                         {
-                            //System.out.println(child.text() );
-                            content.append(оldCyrillicFilter(child.text()) + "\n");
+                            String text =  child.text();
+
+
+
+                            if (StringUtils.isNotEmpty(text) )
+                            {
+                                if (letter.getTo().size() > 0 && StringUtils.isNotEmpty(letter.getTo().get(0).getOriginalEntry())
+                                        && !letter.getTo().get(0).getOriginalEntry().equalsIgnoreCase(text))
+                                {
+                                    //System.out.println(child.text() );
+                                    content.append(оldCyrillicFilter(child.text()) + "\n");
+                                }
+                            }
+
 
                         }
 

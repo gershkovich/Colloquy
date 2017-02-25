@@ -27,7 +27,7 @@
     <entry key="email_server">mail.yale.edu</entry>
 
     <!--Test configuration-->
-    <entry key="elastic_ip_address">localhost</entry>
+    <entry key="elastic_ip_address">colloquy.us</entry>
     <entry key="elastic_cluster_name">colloquy</entry>
 
 

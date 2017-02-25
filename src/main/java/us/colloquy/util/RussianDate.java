@@ -349,18 +349,18 @@ public class RussianDate
 
         if (!nameIsSet)
         {
-            nameIsSet = setLetterBySlavicNameLangErr(letter, toWhom);  //language recognition error H english confuzed with russian N.
+            nameIsSet = setLetterBySlavicNameLangErr(letter, toWhom);  //language recognition error H english confused with russian.
         }
 
         if (!nameIsSet)
         {
-            nameIsSet = setLetterByForeignPattern(letter, toWhom);  //language recognition error H english confuzed with russian N.
+            nameIsSet = setLetterByForeignPattern(letter, toWhom);  //language recognition error H english confused with russian.
         }
 
         if (!nameIsSet)
         {
             //1. Ректору Казанского университета Н. И. Лобачевскому.
-            nameIsSet = setLetterByNumberAndTextPattern(letter, toWhom);  //language recognition error H english confuzed with russian N.
+            nameIsSet = setLetterByNumberAndTextPattern(letter, toWhom);  //language recognition error H english confused with russian.
         }
     }
 
