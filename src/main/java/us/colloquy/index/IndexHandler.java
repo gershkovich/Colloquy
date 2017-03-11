@@ -19,6 +19,7 @@ package us.colloquy.index;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
+import org.elasticsearch.transport.client.PreBuiltTransportClient;
 import us.colloquy.model.DiaryEntry;
 import us.colloquy.model.DocumentPointer;
 import us.colloquy.model.Letter;
@@ -58,6 +59,7 @@ public class IndexHandler
 {
     /**
      * Run this method to load typical Tolstoy letters
+     * Should be run after creating tolstoy index see command below
      */
     @Test
     public void loadLetterIndex()
@@ -79,17 +81,17 @@ public class IndexHandler
 //        person.setOriginalEntry("Толстой Софье Андрееевне");
 
 
-//        getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLettersSpecial/Pisma_k_Chertkovu_toma_87-89", true);
-//        getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLettersSpecial/Pisma_k_Chertkovu_toma_87-89", true);
-//        Person person = new Person();
-//        person.setLastName("Чертков");
-//        person.setFirstName("Владимир");
-//        person.setPaternalName("Григорьевич");
-//        person.setOriginalEntry("Черткову В.Г.");
+        getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLettersSpecial/Pisma_k_Chertkovu_toma_87-89", true);
+        getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLettersSpecial/Pisma_k_Chertkovu_toma_87-89", true);
+        Person person = new Person();
+        person.setLastName("Чертков");
+        person.setFirstName("Владимир");
+        person.setPaternalName("Григорьевич");
+        person.setOriginalEntry("Черткову В.Г.");
 
 
-        getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLetters", false);
-        Person person = null;
+//        getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLetters", false);
+//        Person person = null;
 
 
         for (DocumentPointer pointer : documentPointers)
@@ -121,13 +123,21 @@ public class IndexHandler
         }
 
         // write your code here
-        Settings settings = Settings.settingsBuilder()
+//        Settings settings = Settings.settingsBuilder()
+//                .put("cluster.name", properties.getProperty("elastic_cluster_name")).build();
+//
+//        //open index balk load all letters and process them
+//        try (Client client = TransportClient.builder().settings(settings).build()
+//                .addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
+//        {
+
+        Settings settings = Settings.builder()
                 .put("cluster.name", properties.getProperty("elastic_cluster_name")).build();
 
-        //open index balk load all letters and process them
-        try (Client client = TransportClient.builder().settings(settings).build()
-                .addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
+
+        try (   TransportClient client = new PreBuiltTransportClient(settings).addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
         {
+
             BulkRequestBuilder bulkRequest = client.prepareBulk();
 
             //this is strait forward indexing - for test and validation just comment it out
@@ -185,13 +195,22 @@ public class IndexHandler
         }
 
         // write your code here
-        Settings settings = Settings.settingsBuilder()
+//        Settings settings = Settings.settingsBuilder()
+//                .put("cluster.name", properties.getProperty("elastic_cluster_name")).build();
+//
+//        //open index balk load all letters and process them
+//        try (Client client = TransportClient.builder().settings(settings).build()
+//                .addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
+//        {
+
+        Settings settings = Settings.builder()
                 .put("cluster.name", properties.getProperty("elastic_cluster_name")).build();
 
-        //open index balk load all letters and process them
-        try (Client client = TransportClient.builder().settings(settings).build()
-                .addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
+
+        try (   TransportClient client = new PreBuiltTransportClient(settings).addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
         {
+
+
             BulkRequestBuilder bulkRequest = client.prepareBulk();
 
             //this is strait forward indexing - for test and validation just comment it out
@@ -347,14 +366,23 @@ public class IndexHandler
 
 
         Properties properties = loadProperties();
+//
+//        Settings settings = Settings.settingsBuilder()
+//                .put("cluster.name", properties.getProperty("elastic_cluster_name")).build();
+//
+//
+//        try (Client client = TransportClient.builder().settings(settings).build()
+//                .addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
+//        {
 
-        Settings settings = Settings.settingsBuilder()
+        Settings settings = Settings.builder()
                 .put("cluster.name", properties.getProperty("elastic_cluster_name")).build();
 
 
-        try (Client client = TransportClient.builder().settings(settings).build()
-                .addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
+        try (   TransportClient client = new PreBuiltTransportClient(settings).addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
         {
+
+
             // re-create index if it is  already exists.
             if (client.admin().indices().prepareExists(indexName).execute().actionGet().isExists())
             {

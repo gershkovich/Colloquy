@@ -22,6 +22,7 @@ import org.elasticsearch.client.Client;
 import org.elasticsearch.client.transport.TransportClient;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
+import org.elasticsearch.transport.client.PreBuiltTransportClient;
 
 import java.net.InetAddress;
 import java.text.ParseException;
@@ -31,11 +32,14 @@ import java.text.SimpleDateFormat;
 public class Main {
 
     public static void main(String[] args) {
-	// write your code here
-        Settings settings = Settings.settingsBuilder()
-                .put("cluster.name", "humanity").build();
 
-        try (Client client = TransportClient.builder().settings(settings).build().addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName("127.0.0.1"), 9300)))
+
+
+        Settings settings = Settings.builder()
+                .put("cluster.name", "humanity").build();
+       
+
+        try (   TransportClient client = new PreBuiltTransportClient(settings).addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName("127.0.0.1"), 9300)))
         {
 
 
