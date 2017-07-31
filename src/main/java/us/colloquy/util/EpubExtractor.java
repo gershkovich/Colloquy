@@ -93,6 +93,25 @@ public class EpubExtractor
                     }
                 }
 
+                for (Element element : doc.getElementsByTag("avantitul"))
+                {
+
+
+                    for (Element child : element.children())
+                    {
+                        String label = child.text();
+
+                        if (StringUtils.isNotEmpty(label))
+                        {
+                            if (label.matches("Подготовлено на основе электронной копии.*"))
+                            {
+                                System.out.println("------------------   " + label);
+                            }
+                        }
+                    }
+                    
+                }
+
 
                 for (Element element : doc.getElementsByTag("navPoint"))
                 {
@@ -108,13 +127,17 @@ public class EpubExtractor
                         {
                             if (label.matches("ПИСЬМА"))
                             {
-                                System.out.println("------------------");
+                                System.out.println("------------------ " + "Письма" + " -------------------");
+
+                            } else if (label.contains("ДЕЛОВЫЕ БУМАГИ"))
+                            {
+                                break;
                             }
 
 
                             String url = child.getElementsByTag("content").attr("src");
 
-                            if (label.matches(".*\\d{1,3}.*[А-Яа-я]+.*") &&
+                            if (label.matches(".*\\d{1,3}.*[А-Яа-яA-Za-z]+.*") &&
                                     StringUtils.isNotEmpty(url))
                             {
                                 DocumentPointer documentPointer = new DocumentPointer(parent.toString()

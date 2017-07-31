@@ -28,12 +28,13 @@ import org.junit.Test;
 import us.colloquy.model.DocumentPointer;
 import us.colloquy.model.Letter;
 import us.colloquy.model.Person;
+import us.colloquy.model.reference.ToWhom;
 import us.colloquy.util.EpubExtractor;
 import us.colloquy.util.ResourceLoader;
+import us.colloquy.util.RussianDate;
 import us.colloquy.util.Unzip;
 
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.net.InetAddress;
 import java.util.*;
 import java.util.regex.Matcher;
@@ -67,8 +68,8 @@ public class TestLetterParser
 
         try
         {
-            Unzip.unZipFilesFromTo(System.getProperty("user.home") + "/IdeaProjects/Colloquy/samples/letters",
-                    System.getProperty("user.home") + "/IdeaProjects/Colloquy/samples/letters/expanded" , "epub");
+            Unzip.unZipFilesFromTo(System.getProperty("user.home") + "/IdeaProjects/Colloquy/samples/volumes",
+                    System.getProperty("user.home") + "/IdeaProjects/Colloquy/samples/volumes/expanded" , "epub");
 
 
 
@@ -87,8 +88,20 @@ public class TestLetterParser
     @Test
     public void parseDocuments()
     {
+        Map<String,String> toWhomMap = null;
+        //load map of addressees
+        try {
+
+            toWhomMap =  ResourceLoader.loadToWhomMap("references/toWhom.json");
+
+        } catch (Exception e)
+        {
+            e.printStackTrace();
+        }
 
         List<Letter> letterList = new ArrayList<>();
+
+        List<Letter> rejectedLetters =  new ArrayList<>();   //a list for rejected letter to review and improve the algorithm
 
         //get аll letters
         Set<DocumentPointer> documentPointers = new TreeSet<>();
@@ -111,28 +124,94 @@ public class TestLetterParser
 
 
         //Here we collect all URIs to files containing letter details are in EpubExtractor
-        EpubExtractor.getURIForAllLetters(documentPointers, homeDir + "/IdeaProjects/Colloquy/samples/letters/expanded", false);
+        EpubExtractor.getURIForAllLetters(documentPointers, homeDir + "/IdeaProjects/Colloquy/samples/volumes/expanded", false);
 
         Person person = null;
 
+        Map<String, List<DocumentPointer>> volumeMap = new LinkedHashMap<>();
+
         for (DocumentPointer pointer : documentPointers)
         {
-            //for every pointer we get letter - this is the core code for extracting letters
-            us.colloquy.util.LetterParser.parseLetters(pointer, letterList, person);   //test case "temp/OEBPS/Text/0001_1006_2002.xhtml"
+            if (volumeMap.containsKey(pointer.getSourse()))
+            {
+                volumeMap.get(pointer.getSourse()).add(pointer);
+
+            } else
+            {
+                List<DocumentPointer> dp = new ArrayList<>();
+                dp.add(pointer);
+                volumeMap.put(pointer.getSourse(), dp);
+            }
 
         }
 
-        System.out.println("Total number of letters: " + letterList.size());
+        for (String volume: volumeMap.keySet())
+        {
+            letterList.clear();
+
+            for (DocumentPointer dp: volumeMap.get(volume))
+            {
+                //for every pointer we get letter - this is the core code for extracting letters
+                us.colloquy.util.LetterParser.parseLetters(dp, letterList, person, toWhomMap, rejectedLetters);   //test case "temp/OEBPS/Text/0001_1006_2002.xhtml"
+            }
+
+            System.out.println("---------------------------------------------------------- rejected ");
+
+            System.out.println(" Letters: " + letterList.size() + " Rejected letters: " + rejectedLetters.size());
+
+            try
+            {
+                ObjectWriter ow = new com.fasterxml.jackson.databind.ObjectMapper().writer().withDefaultPrettyPrinter();
+
+
+                System.out.println("-------------------- Start rejected letters ------------- ");
+
+                String json = ow.writeValueAsString(rejectedLetters);
+
+                System.out.println(json);
+
+                System.out.println("-------------------- End rejected letters ------------- ");
+
+                json = ow.writeValueAsString(letterList);
+
+                System.out.println("-------------------- Start letters ------------- ");
+
+                String origin = letterList.get(0).getSource();
+
+                try (Writer out = new BufferedWriter(new OutputStreamWriter(
+                        new FileOutputStream("parsed/letters/" + volume.replaceAll("Полное собрание сочинений. ","").replaceAll("Том","Volume")
+                                .trim().replaceAll("\\s","_").trim() + ".json"), "UTF-8")))
+                {
+                    out.write(json);
+
+                }
+
+                //print to a file
+                // System.out.println(json);
+
+                System.out.println("-------------------- End letters ------------- ");
+
+
+            } catch (Exception e)
+            {
+                e.printStackTrace();
+            }
+
+            System.out.println("Total number of letters: " + letterList.size());
+
+        }
 
         //code below to check a few letters
+
         int i = 0;
+
         for (Letter letter : letterList)
         {
             i++;
 
             if (letter.getDate() == null)
             {
-                System.out.println(" ------------------------------------------------------------------");
+                System.out.println(" ------------------------------------------------------------------ no date");
                 System.out.println(letter.toString());
 
             }
@@ -149,7 +228,7 @@ public class TestLetterParser
 
 
         ObjectWriter ow = new com.fasterxml.jackson.databind.ObjectMapper().writer().withDefaultPrettyPrinter();
-//
+
         for (Letter letter : letterList)
         {
 //                if (letter.getDate() == null)
@@ -180,12 +259,11 @@ public class TestLetterParser
 
                 while (m.find()) {
 
-
                     m.appendReplacement(sb, "{" + m.group(1) + "}");
                 }
                 m.appendTail(sb);
 
-                System.out.println("Content: " + sb.toString());
+             //   System.out.println("Content: " + sb.toString());
             }
 
 
@@ -253,8 +331,75 @@ public class TestLetterParser
         m.appendTail(sb);
 
         System.out.println(sb);
+    }
 
+
+    @Test
+    public void parseLocation() throws Exception
+    {
+        /*
+        <h2 class="center" id="sigil_toc_id_28"><strong>1866</strong></h2>
+<p><strong>68. А. Н. Бибикову.</strong><em> Февраля 4. Москва.</em> Упоминается в письме Толстого к Т. А. Ергольской от 4 февраля.</p>
+<p><strong>69. Е. Л. Маркову.</strong> <em>Март — апреля начало. Я. П.</em> Упоминается в письме Е. Л. Маркова к Толстому от 11 апреля: «Благодарю вас за ваше дружелюбное письмо, Лев Николаевич, которое было особенно дорого получить в Крыму».</p>
+<p><strong>70. А. Е. Берсу.</strong><em> Апреля 4. Я. П.</em> Упоминается в письме Толстого к М. С. Башилову от 4 апреля.</p>
+<p><strong>71. А. Е. Берсу.</strong><em> Мая 11...13. Я. П.</em> Упоминается в письме А. Е. Берса к Толстому от 16 мая.</p>
+<p><strong>72. И. И. Орлову.</strong><em> Мая 1...20? Я. П.</em> Упоминается в письме Толстого к Д. А. Дьякову от 23 мая.</p>
+<p><strong>73. А. Е. Берсу.</strong><em> Мая 23...25. Я. П.</em> Упоминается в письме А. Е. Берса к Т. А. Кузминской от 27 мая: «Сегодня получил письмо от Толстого, в котором он объявляет нам, что Соня обочлась целым месяцем и изволила 22 мая родить сына Илью».</p>
+<p><strong>74—75. А. Е. Берсу.</strong> <em>Мая конец — июня начало Я. П. </em>Упоминаются в письме А. Е. Берса к Толстому от 6 июня: «Благодарю тебя... за частые известия об Софье. Я даже не успел еще ответить тебе на два последние твои письма».</p>
+<p><strong>76. А. Е. Берсу.</strong><em> Июня средина. Я. П.</em> Упоминается в письме А. Е. Берса к Толстому от 25 июня: «Приехав в Москву 22 июня вечером, я нашел два письма от милой моей Тани и твою приписочку, в которой сказано, чтобы я скорее прислал тебе 500 р.».</p>
+<p><strong>77—78. А. А. Толстой.</strong><em> Июля средина — конец. Я. П.</em> Упоминаются в статье Толстого «Воспоминание о суде над солдатом Шибуниным»: «...я написал... А. А. Толстой, прося ее ходатайствовать перед государем... но по рассеянности не написал имени полка, в котором происходило дело... Она написала это мне, я поторопился ответить...» (Б, II, стр. 98).</p>
+<p><strong>79—80. А. Е. Берсу.</strong><em> Июля конец. Я. П. </em>Упоминаются в письме А. Е. Берса к Л. Н. и С. А. Толстым от 3 августа: «Ваши два последние письма были весьма неутешительны».</p>
+<p><strong>81. Л. А. Берс.</strong><em> Сентября 12...14? Я. П. </em>Упоминается в письме А. Е. Берса к Л. Н. и С. А. Толстым от 18 сентября: «Вчера отпраздновали именины мама. Ваши письма получили мы накануне... Я так и обмер, когда прочел, что ты берешь с собой на охоту Колокольцова...»</p>
+<p><strong>82. Т. А. Берс.</strong><em> Октября 27...29? Я. П. </em>Упоминается в письме Т. А. Берс к С. А. Толстой от 1 ноября.</p>
+<p><strong>83. А. А. Берсу.</strong><em> Ноября 12. Москва.</em> Упоминается в письме к С. А. Толстой от 12 ноября (т. 83, № 56).</p>
+<p><strong>84. Т. А. Берс.</strong><em> Ноября 19...21. Я. П.</em> Упоминается в письме Т. А. Берс к Л. Н. и С. А. Толстым от 23 ноября.</p>
+         */
+
+
+        Letter letter = new Letter();
+
+        String previousYear = "1866";
+        
+        String tail = "1899 г. Октября 22. Я. П.";
+
+        RussianDate.parseDateAndPlace(letter, tail, previousYear);  //a parser that figures out date and place if they are pres
+
+        System.out.println(letter);
 
 
     }
+
+
+    @Test
+    public void testParseAddressee() throws Exception
+    {
+//        Pattern patternToWhomLetterMissmatch =
+//                Pattern.compile("(\\.\\s{1,2}([\\p{IsCyrillic}HAETOPKXCBM]*)\\.\\s{1,3}([\\p{IsCyrillic}HAETOPKXCBM]*)\\.\\s{1,2}" +
+//                        "([\\p{IsCyrillic}]*)(.*)");
+
+        Pattern patternToWhom =
+                Pattern.compile("(\\s{1,2}([а-я]))");
+
+
+        String line = "Ба да лбекову Фридуну Хану";
+
+     
+        Matcher m = patternToWhom.matcher(line);
+
+        int i = 0;
+
+        StringBuffer sb = new StringBuffer();
+
+        while (m.find()) {
+            System.out.println();
+            //  System.out.println(m.group(2));
+            i ++;
+            m.appendReplacement(sb, "{" + m.group(1) + "}");
+        }
+        m.appendTail(sb);
+
+        System.out.println(sb);
+    }
+
+
 }

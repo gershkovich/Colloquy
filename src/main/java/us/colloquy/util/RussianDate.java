@@ -25,7 +25,9 @@ import us.colloquy.model.Person;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -35,7 +37,7 @@ import java.util.regex.Pattern;
 public class RussianDate
 {
 
-    final static Pattern patternToWhom = Pattern.compile("(\\d{1,4})\\.\\s{1,2}([\\p{IsCyrillic}]*)\\.\\s{1,3}([\\p{IsCyrillic}]*)\\.\\s{1,2}" +
+    final static Pattern patternToWhom = Pattern.compile("(\\d{1,4})\\.?\\s{1,2}([\\p{IsCyrillic}]*)\\.\\s{1,3}([\\p{IsCyrillic}]*)\\.\\s{1,2}" +
             "([\\p{IsCyrillic}]*)(.*)");
 
     final static Pattern patternToWhomLetterMissmatch =
@@ -51,6 +53,8 @@ public class RussianDate
     final static Pattern patternToWhomForeign = Pattern.compile("(\\d{1,4})\\.\\s{0,3}([\\p{IsCyrillic}]*)\\.?\\s{0,3}([\\p{IsCyrillic}]*)(.*[A-Za-z]{2,10}.*)");
 
     final static Pattern patternToWhomNumberAnything = Pattern.compile("(\\d{1,3})\\.\\s{0,3}(.*)");
+
+    private final static  Map<String, String> locations = new HashMap<>();
 
     public static DateAndPlace parseDateAndPlace(String dateStr, String lastYearUsed)
     {
@@ -104,6 +108,16 @@ public class RussianDate
 
     public static void parseDateAndPlace(Letter letter, String dateStr, String lastYearUsed)
     {
+
+
+        locations.put("Я. П.", "Ясная Поляна");
+        locations.put("Я П", "Ясная Поляна");
+        locations.put("Я. П", "Ясная Поляна");
+
+
+
+
+
         String previouslyUsedYear = lastYearUsed;
 
         String[] dateLocationElements = dateStr.split("\\s|\\.\\.\\.");
@@ -112,7 +126,10 @@ public class RussianDate
 
         assembleDate(previouslyUsedYear, dateLocationElements, dap);
 
-        letter.setPlace(dap.getPlace().toString());
+        String place = dap.getPlace().toString();
+
+
+        letter.setPlace(validatePlace(place));
 
         SimpleDateFormat format = new SimpleDateFormat("dd MMM yyyy", new Locale("ru"));
 
@@ -165,7 +182,11 @@ public class RussianDate
 
         assembleDate(previouslyUsedYear, dateLocationElements, dap);
 
-        diaryEntry.setPlace(dap.getPlace().toString());
+
+            diaryEntry.setPlace(validatePlace(dap.getPlace().toString()));
+
+
+
 
         SimpleDateFormat format = new SimpleDateFormat("dd MMM yyyy", new Locale("ru"));
 
@@ -209,6 +230,33 @@ public class RussianDate
 
     }
 
+    private static String validatePlace(String place)
+    {
+        if (StringUtils.isNotEmpty(place))
+        {
+            if (locations.containsKey(place))
+            {
+                return  locations.get(place);
+
+            } else
+            {
+                if (place.matches("[A-ZА-Я].*"))
+                {
+                    return place.replaceAll("\\.","");
+                }
+                else
+                {
+                    return "";
+
+                }
+            }
+        }
+        else
+        {
+            return "";
+        }
+    }
+
 
     private static void assembleDate(String previouslyUsedYear, String[] dateLocationElements, DateAndPlace dap)
     {
@@ -248,7 +296,31 @@ public class RussianDate
                 dap.setDay(elCleared.replaceAll("(—|-).*", "").replaceAll("\\D", ""));
 
 
-            } else
+            } else if (elCleared.matches("конец"))
+            {
+                dap.setDay("25");
+
+
+            }
+            else if (elCleared.matches("(средина|сeредина|средина.|сeредина.)"))
+            {
+                dap.setDay("15");
+
+
+            }
+            else if (elCleared.matches("(начало)"))
+            {
+                dap.setDay("5");
+
+
+            }   else if (elCleared.matches(("[^\\p{L}\\p{Nd}]+")))
+            {
+               //skip it
+                System.out.println("found dash");
+
+
+            }
+            else
             {
 
                 String month = matchRussianMonth(elCleared, dap.getDay());
@@ -372,7 +444,7 @@ public class RussianDate
 
         if (m.find())
         {
-            letter.setId(m.group(1));
+           // letter.setId(m.group(1));
 
 //            if (StringUtils.isNotEmpty(m.group(2)) && m.group(2).length() > 1)
 //            {
@@ -425,7 +497,7 @@ public class RussianDate
 
         if (m.find())
         {
-            letter.setId(m.group(1));
+           // letter.setId(m.group(1));
 
             if (StringUtils.isNotEmpty(m.group(2)) && m.group(2).length() > 1)
             {
@@ -488,7 +560,7 @@ public class RussianDate
 
             // System.out.println(m.group(1) + "\t" + m.group(2) + "\t" + m.group(3) + "\t" + m.group(4) + "\t" + m.group(5));
 
-            letter.setId(m.group(1));
+            //letter.setId(m.group(1));
 
             if (StringUtils.isNotEmpty(m.group(2)))
             {
@@ -564,7 +636,7 @@ public class RussianDate
         {
             // System.out.println(m.group(1) + "\t" + m.group(2) + "\t" + m.group(3) + "\t" + m.group(4) + "\t" + m.group(5));
 
-            letter.setId(m.group(1));
+            //letter.setId(m.group(1));
 
 
             if (StringUtils.isNotEmpty(m.group(2)))

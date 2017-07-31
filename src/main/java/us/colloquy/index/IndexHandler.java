@@ -41,6 +41,7 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.junit.Test;
+import us.colloquy.util.ResourceLoader;
 
 import java.io.File;
 import java.io.IOException;
@@ -68,6 +69,8 @@ public class IndexHandler
 
         List<Letter> letterList = new ArrayList<>();
 
+        List<Letter> rejectedLetters =  new ArrayList<>();   //a list for rejected letter to review and improve the algorithm
+
         //get аll letters
         Set<DocumentPointer> documentPointers = new TreeSet<>();
 
@@ -81,29 +84,51 @@ public class IndexHandler
 //        person.setOriginalEntry("Толстой Софье Андрееевне");
 
 
-        getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLettersSpecial/Pisma_k_Chertkovu_toma_87-89", true);
-        getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLettersSpecial/Pisma_k_Chertkovu_toma_87-89", true);
-        Person person = new Person();
-        person.setLastName("Чертков");
-        person.setFirstName("Владимир");
-        person.setPaternalName("Григорьевич");
-        person.setOriginalEntry("Черткову В.Г.");
+//        getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLettersSpecial/Pisma_k_Chertkovu_toma_87-89", true);
+//        getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLettersSpecial/Pisma_k_Chertkovu_toma_87-89", true);
+//        Person person = new Person();
+//        person.setLastName("Чертков");
+//        person.setFirstName("Владимир");
+//        person.setPaternalName("Григорьевич");
+//        person.setOriginalEntry("Черткову В.Г.");
 
 
-//        getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLetters", false);
-//        Person person = null;
+        getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLetters", false);
 
+        Person person = null;
+
+        Map<String, String> toWhomMap = null;
+        //load map of addressees
+        try
+        {
+
+            toWhomMap = ResourceLoader.loadToWhomMap("references/toWhom.json");
+
+        } catch (Exception e)
+        {
+            e.printStackTrace();
+        }
 
         for (DocumentPointer pointer : documentPointers)
         {
-            LetterParser.parseLetters(pointer, letterList, person);   //test case "temp/OEBPS/Text/0001_1006_2002.xhtml"
+            if (toWhomMap != null)
+            {
+                LetterParser.parseLetters(pointer, letterList, person, toWhomMap, rejectedLetters);   //test case "temp/OEBPS/Text/0001_1006_2002.xhtml"
+            } else
+            {
+                System.out.println("ToWhom Map must be initialized.");
+            }
 
         }
 
         System.out.println("Total number of letters: " + letterList.size());
 
+        Set<String> locations = new TreeSet<>();
+
         //code below to check a few letters
+
         int i = 0;
+
         for (Letter letter : letterList)
         {
             i++;
@@ -116,10 +141,27 @@ public class IndexHandler
 
             }
 
+            if (StringUtils.isNotEmpty(letter.getPlace()))
+            {
+
+                locations.add(letter.getPlace());
+
+            } else
+            {
+                System.out.println(" ------------------------------------------------------------------");
+                System.out.println(letter.toString());
+
+            }
+
 //            if (i > 15)
 //            {
 //                break;
 //            }
+        }
+
+        for (String loc : locations)
+        {
+            System.out.println(loc);
         }
 
         // write your code here
@@ -131,11 +173,20 @@ public class IndexHandler
 //                .addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
 //        {
 
+        if (properties.getProperty("upload_to_elastic").equalsIgnoreCase("true"))
+        {
+            uploadToElasticServer(properties, letterList);
+        }
+    }
+
+    private void uploadToElasticServer(Properties properties, List<Letter> letterList)
+    {
         Settings settings = Settings.builder()
                 .put("cluster.name", properties.getProperty("elastic_cluster_name")).build();
 
 
-        try (   TransportClient client = new PreBuiltTransportClient(settings).addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
+        try (TransportClient client = new PreBuiltTransportClient(settings).
+                addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
         {
 
             BulkRequestBuilder bulkRequest = client.prepareBulk();
@@ -161,7 +212,7 @@ public class IndexHandler
         //get аll letters
         Set<DocumentPointer> documentPointers = new TreeSet<>();
 
-      //  getURIForAllDiaries(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/openDiaries");
+        //  getURIForAllDiaries(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/openDiaries");
 
 
         getURIForAllDiaries(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/90-volume-set/diaries/uzip");
@@ -207,7 +258,7 @@ public class IndexHandler
                 .put("cluster.name", properties.getProperty("elastic_cluster_name")).build();
 
 
-        try (   TransportClient client = new PreBuiltTransportClient(settings).addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
+        try (TransportClient client = new PreBuiltTransportClient(settings).addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
         {
 
 
@@ -379,7 +430,7 @@ public class IndexHandler
                 .put("cluster.name", properties.getProperty("elastic_cluster_name")).build();
 
 
-        try (   TransportClient client = new PreBuiltTransportClient(settings).addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
+        try (TransportClient client = new PreBuiltTransportClient(settings).addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
         {
 
 
@@ -426,7 +477,8 @@ public class IndexHandler
 
         int maxDepth = 6;
 
-        try (Stream<Path> stream = Files.find(pathToLetters, maxDepth, (path, attr) -> {
+        try (Stream<Path> stream = Files.find(pathToLetters, maxDepth, (path, attr) ->
+        {
             return String.valueOf(path).endsWith(".ncx");
         }))
         {
@@ -577,9 +629,6 @@ public class IndexHandler
     }
 
 
-
-
-
     public void getURIForAllDiaries(Set<DocumentPointer> documentPointers, String letterDirectory)
     {
 
@@ -590,7 +639,8 @@ public class IndexHandler
 
         int maxDepth = 6;
 
-        try (Stream<Path> stream = Files.find(pathToLetters, maxDepth, (path, attr) -> {
+        try (Stream<Path> stream = Files.find(pathToLetters, maxDepth, (path, attr) ->
+        {
             return String.valueOf(path).endsWith(".ncx");
         }))
         {
@@ -655,7 +705,7 @@ public class IndexHandler
 
                     if (navLabelElement != null)
                     {
-                        navLabel = navLabelElement.text().replaceAll("\\*","").trim();
+                        navLabel = navLabelElement.text().replaceAll("\\*", "").trim();
                     }
 
                     if (srsElement != null)
@@ -701,11 +751,11 @@ public class IndexHandler
 
         System.out.println("Size: " + documentPointers.size());
 
-      //  for (DocumentPointer pointer : documentPointers)
-       // {
-            //parse and
-       //     System.out.println(pointer.getSourse() + "\t" + pointer.getUri());
-        }
+        //  for (DocumentPointer pointer : documentPointers)
+        // {
+        //parse and
+        //     System.out.println(pointer.getSourse() + "\t" + pointer.getUri());
+    }
 
 
 }

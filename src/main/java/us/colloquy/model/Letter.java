@@ -33,6 +33,8 @@ public class Letter
     private String content;
     private List<String> notes = new ArrayList<>();
     private String source;
+    private String toWhom; // to whom it was addressed is taken from reference - parsed volume 91
+    private String documentPointer;
 
     public String getId()
     {
@@ -114,6 +116,26 @@ public class Letter
         this.modern = modern;
     }
 
+    public String getToWhom()
+    {
+        return toWhom;
+    }
+
+    public void setToWhom(String toWhom)
+    {
+        this.toWhom = toWhom;
+    }
+
+    public String getDocumentPointer()
+    {
+        return documentPointer;
+    }
+
+    public void setDocumentPointer(String documentPointer)
+    {
+        this.documentPointer = documentPointer;
+    }
+
     @Override
     public String toString()
     {
@@ -123,6 +145,8 @@ public class Letter
         {
           people.append(person.toString());
         }
-        return id + "\t" + (date !=null ? date.toString(): "no date") + "\t" + place + "\t" + source + "\nto: " + people.toString() + "\n Content: " + content + "\n Notes: " + notes ;
+        return id + "\t Date: " + (date !=null ? date.toString(): "no date") + "\t Place: " + place + "\t Source:" + source
+                + "\nto whom: " + getToWhom()
+                + "\nto: " + people.toString() + "\n Content: " + content + "\n Notes: " + notes;
     }
 }

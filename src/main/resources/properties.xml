@@ -22,15 +22,17 @@
 
     <entry key="productionMode">true</entry>
 
+    <entry key="upload_to_elastic">false</entry>
+
     <entry key="email_sender">peter.gershkovich@yale.edu</entry>
 
     <entry key="email_server">mail.yale.edu</entry>
 
-    <!--Test configuration-->
-    <entry key="elastic_ip_address">colloquy.us</entry>
-    <entry key="elastic_cluster_name">colloquy</entry>
-
     <!--Prod configuration-->
+    <!--<entry key="elastic_ip_address">colloquy.us</entry>-->
+    <!--<entry key="elastic_cluster_name">colloquy</entry>-->
+
+    <!--Test configuration-->
     <entry key="elastic_ip_address">127.0.0.1</entry>
     <entry key="elastic_cluster_name">colloquy</entry>
 

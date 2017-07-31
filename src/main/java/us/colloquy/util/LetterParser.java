@@ -16,10 +16,12 @@
 
 package us.colloquy.util;
 
+import com.fasterxml.jackson.databind.ObjectWriter;
 import org.apache.commons.lang3.StringUtils;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 import org.junit.Assert;
 import org.junit.Test;
 import us.colloquy.model.DocumentPointer;
@@ -32,23 +34,32 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Created by Peter Gershkovich on 12/20/15.
  */
 public class LetterParser
 {
+
+
+    final static Pattern patternId = Pattern.compile("\\*\\s?(\\d{1,3}[а-я]{0,1})");
+    final static Pattern patternId2 = Pattern.compile("^(\\d{1,3}[а-я]{0,1})");
+
+
     /**
      * This is the hart of parsing process
      *
      * @param documentPointer
      * @param letters
+     * @param toWhomMap
      */
-    public static void parseLetters(DocumentPointer documentPointer, List<Letter> letters, Person person)
+
+    public static void parseLetters(DocumentPointer documentPointer, List<Letter> letters, Person person, Map<String, String> toWhomMap, List<Letter> rejectedLetters)
     {
         File input = new File(documentPointer.getUri());
-
-        List<Letter> rejectedLetters =  new ArrayList<>();   //a list for rejected letter to review and improve the algorithm
 
 
         try
@@ -62,6 +73,7 @@ public class LetterParser
             for (Element element : doc.getElementsByClass("section")) //we are interested in sections
             {
 
+
                 if (element.getElementsByTag("p").size() == 0)  //that simply means that there is no content and that is not a letter that can be considered
                 {
                     continue;
@@ -74,9 +86,20 @@ public class LetterParser
                 if (StringUtils.isNotEmpty(sectionId))  //section should have an id in most cases
                 {
 
-                } else
+                } else   //we try to find if a child node contains section id
                 {
                     String oldLetter = "";
+
+                    Elements elementChildren = element.getElementsByClass("center");
+
+                    for (Element child : elementChildren)
+                    {
+                        if (child.id() != null && child.id().contains("sigil_toc_id"))
+                        {
+                            sectionId = child.id();
+                        }
+                    }
+
                 }
 
                 String header = element.text();
@@ -88,11 +111,9 @@ public class LetterParser
                     useSection = false; //ignore irrelevant sections
                 }
 
-
-
                 if (useSection)
                 {
-                      //used for test
+                    //used for test
 //                    if ("Письма. 1859 г.".equalsIgnoreCase(documentPointer.getSourse()))
 //                    {
 //                        String stop = "";
@@ -103,6 +124,7 @@ public class LetterParser
 
 
                     letter.setSource(documentPointer.getSourse());
+                    letter.setDocumentPointer(documentPointer.getUri());
 
                     StringBuilder content = new StringBuilder();
 
@@ -122,13 +144,42 @@ public class LetterParser
                                 ((StringUtils.isNotEmpty(className) && className.contains("center")) ||
                                         (StringUtils.isNotEmpty(childId) && childId.contains("sigil_toc_id"))))
                         {
+
+                            if (childId.contains("sigil_toc_id_126"))
+                            {
+                                String stop = "";
+
+                            }
+
                             String toWhom = child.getElementsByTag("strong").text();
+
+                            if (toWhom.contains("193. М. С. Башилову."))
+                        {
+                            String stop = "";
+
+                        }
+
+                            //find to whom from the index
+                            String volume = letter.getSource().replaceAll("\\D", "").trim();
+
+                            //typically this entry contains a one to three digits occasionally followed by a small case letter
+                            if (StringUtils.isNotEmpty(toWhom))
+                            {
+
+                                String letterId = extractId(toWhom.trim());
+
+                                String toWhomFromMap = toWhomMap.get(volume + "-" + letterId);
+
+                                letter.setToWhom(toWhomFromMap);
+
+                                letter.setId(volume + "-" + letterId);
+                            }
 
                             if (person == null && letter.getTo().size() == 0) //allow it only once per letter
                             {
                                 if (StringUtils.isEmpty(toWhom))
                                 {
-                                    System.out.print(toWhom);
+                                    System.out.print("Unable to figure out to whom: " + toWhom);
                                     System.out.print("\t");
                                     toWhom = оldCyrillicFilter(child.text());
                                     System.out.println(toWhom);
@@ -148,10 +199,9 @@ public class LetterParser
                                 if (StringUtils.isNotEmpty(toWhom) && toWhom.matches(".{0,3}\\d{1,4}.{0,3}"))
                                 {
 
-                                    letter.setId(toWhom.replaceAll("\\D", ""));
+                                   // letter.setId(toWhom.replaceAll("\\D", ""));
 
                                 }
-
 
                             }
 
@@ -162,7 +212,7 @@ public class LetterParser
 
                             String tail = entireText.replace(toWhom, "");
 
-                            if (StringUtils.isNotEmpty(tail))
+                            if (StringUtils.isNotEmpty(tail) && letter.getDate()==null) //only if date is not already set
                             {
                                 RussianDate.parseDateAndPlace(letter, tail, previousYear);
                             }
@@ -191,15 +241,16 @@ public class LetterParser
                                 // System.out.println("when and where\t " + child.getElementsByTag("em").text());
 
 
-                            } else {
+                            } else
+                            {
 
-                                 dateElement = child.select("p").first();
+                                dateElement = child.select("p").first();
 
-                                 if (dateElement.text().matches("\\d{4}\\s?г.\\s{1,2}[А-яA-z]{3,9}\\s{1,2}\\d{1,2}\\.?\\s{0,2}.{0,25}")
-                                         && letter.getDate() == null) //we still don't have date
-                                 {
-                                     previousYear = parseDateAndPlace(previousYear, letter, child);
-                                 }
+                                if (dateElement.text().matches("\\d{4}\\s?г.\\s{1,2}[А-яA-z]{3,9}\\s{1,2}\\d{1,2}\\.?\\s{0,2}.{0,25}")
+                                        && letter.getDate() == null) //we still don't have date
+                                {
+                                    previousYear = parseDateAndPlace(previousYear, letter, child);
+                                }
 
                             }
 
@@ -213,11 +264,9 @@ public class LetterParser
 
                         } else
                         {
-                            String text =  child.text();
+                            String text = child.text();
 
-
-
-                            if (StringUtils.isNotEmpty(text) )
+                            if (StringUtils.isNotEmpty(text))
                             {
                                 if (letter.getTo().size() > 0 && StringUtils.isNotEmpty(letter.getTo().get(0).getOriginalEntry())
                                         && !letter.getTo().get(0).getOriginalEntry().equalsIgnoreCase(text))
@@ -236,42 +285,31 @@ public class LetterParser
 
                     letter.setContent(content.toString());
 
-                    if (letter.getDate() !=null &&
+                    if (letter.getDate() != null && letter.getToWhom() != null &&
                             StringUtils.isNotEmpty(letter.getContent()) && letter.getContent().length() > 10) //at least some content is necessary
                     {
                         if (StringUtils.isEmpty(letter.getId()))
                         {
-                            letter.setId(sectionId != null ? sectionId : "unknown - " + (int) (Math.random() * 100));
+                            if (StringUtils.isEmpty(letter.getId()))
+                            {
+                                letter.setId(sectionId != null ? sectionId : "unknown - " + (int) (Math.random() * 100));
+                            }
                             ///  System.out.println(letter.toString());
                         }
 
                         letters.add(letter);
+
                     } else
                     {
+                        if (StringUtils.isEmpty(letter.getId()))
+                        {
+                            letter.setId(sectionId != null ? sectionId : "unknown - " + (int) (Math.random() * 100));
+                        }
+
                         rejectedLetters.add(letter);
                     }
                 }
             }
-
-
-//            ObjectWriter ow = new com.fasterxml.jackson.databind.ObjectMapper().writer().withDefaultPrettyPrinter();
-//
-//            for (Letter letter : letters)
-//            {
-////                if (letter.getDate() == null)
-////                {
-//                for (Person person : letter.getTo())
-//                {
-////                        if (StringUtils.isNotEmpty(person.getLastName()))
-////                        {
-//                    String json = ow.writeValueAsString(letter);
-//
-//                    System.out.println(json);
-////                        }
-//                }
-//                //}
-//
-//            }
 
 
         } catch (IOException e)
@@ -279,14 +317,39 @@ public class LetterParser
             e.printStackTrace();
         }
 
-        System.out.println("----------------------------------------------------------");
+    }
 
-        System.out.println(documentPointer.toString() + " Letters: " + letters.size() + " Rejected letters: " + rejectedLetters.size());
+    private static String extractId(String filteredString)
+    {
+        String id = "";
+        Matcher m = patternId.matcher(filteredString);
 
-        for (Letter letter: rejectedLetters)
+        if (m.find())
         {
-            System.out.println(letter.toString());
+            if (StringUtils.isNotEmpty(m.group(1)))
+            {
+                id = m.group(1);
+            }
+
         }
+
+        if (StringUtils.isEmpty(id))
+        {
+            m = patternId2.matcher(filteredString);
+
+            if (m.find())
+            {
+                if (StringUtils.isNotEmpty(m.group(1)))
+                {
+                    id = m.group(1);
+                }
+
+            }
+
+        }
+
+
+        return id.trim();
 
     }
 
@@ -337,7 +400,7 @@ public class LetterParser
     public void testOldCyrillicFilter()
     {
 
-      String conv = оldCyrillicFilter("Въ маѣ мѣсяцѣ текущаго года я вмѣстѣ съ учениками первой и второй Казанской гимназіи подвергался испытанію, съ цѣлью поступить въ число студентовъ Казанскаго университета разряда арабско-турецкой словесности. Но какъ на этомъ испытаніи не оказалъ надлежащихъ свѣдѣній въ исторіи, статистикѣ, то и прошу покорнѣйше ваше превосходительство дозволить мнѣ нынѣ снова экзаменоваться въ этихъ предметахъ.");
+        String conv = оldCyrillicFilter("Въ маѣ мѣсяцѣ текущаго года я вмѣстѣ съ учениками первой и второй Казанской гимназіи подвергался испытанію, съ цѣлью поступить въ число студентовъ Казанскаго университета разряда арабско-турецкой словесности. Но какъ на этомъ испытаніи не оказалъ надлежащихъ свѣдѣній въ исторіи, статистикѣ, то и прошу покорнѣйше ваше превосходительство дозволить мнѣ нынѣ снова экзаменоваться въ этихъ предметахъ.");
 
 
         Assert.assertTrue(conv.equals("В мае месяце текущаго года я вместе с учениками первой и второй Казанской гимназии подвергался испытанию, с целью поступить в число студентов Казанскаго университета разряда арабско-турецкой словесности. Но как на этом испытании не оказал надлежащих сведений в истории, статистике, то и прошу покорнейше ваше превосходительство дозволить мне ныне снова экзаменоваться в этих предметах."));
