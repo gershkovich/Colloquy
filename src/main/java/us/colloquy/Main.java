@@ -21,7 +21,7 @@ import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.client.transport.TransportClient;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.transport.InetSocketTransportAddress;
+import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.transport.client.PreBuiltTransportClient;
 
 import java.net.InetAddress;
@@ -37,9 +37,9 @@ public class Main {
 
         Settings settings = Settings.builder()
                 .put("cluster.name", "humanity").build();
-       
 
-        try (   TransportClient client = new PreBuiltTransportClient(settings).addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName("127.0.0.1"), 9300)))
+
+        try (   TransportClient client = new PreBuiltTransportClient(settings).addTransportAddress(new TransportAddress(InetAddress.getByName("127.0.0.1"), 9300)))
         {
 
 
@@ -172,8 +172,6 @@ public class Main {
     public static ChronicleEntry getChronicle() throws ParseException
     {
         SimpleDateFormat sd = new SimpleDateFormat("MM/dd/yyy");
-
-
         ChronicleEntry cr = new ChronicleEntry();
 
 

@@ -22,7 +22,6 @@ import org.elasticsearch.action.bulk.BulkRequestBuilder;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.client.transport.TransportClient;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.junit.Before;
 import org.junit.Test;
 import us.colloquy.model.DocumentPointer;
@@ -39,6 +38,8 @@ import java.net.InetAddress;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import static us.colloquy.util.ElasticLoader.uploadLettersToElasticServer;
 
 /**
  * Created by Peter Gershkovich on 9/10/16.
@@ -65,12 +66,10 @@ public class TestLetterParser
     @Test
     public void decompressEPUBFiles()
     {
-
         try
         {
             Unzip.unZipFilesFromTo(System.getProperty("user.home") + "/IdeaProjects/Colloquy/samples/volumes",
                     System.getProperty("user.home") + "/IdeaProjects/Colloquy/samples/volumes/expanded" , "epub");
-
 
 
         } catch (IOException e)
@@ -89,7 +88,9 @@ public class TestLetterParser
     public void parseDocuments()
     {
         Map<String,String> toWhomMap = null;
-        //load map of addressees
+
+
+        //load map of addressees (this is something that comes from a parsed last volume of Tolstoy's 90 volume addition (91st volume is the index of names))
         try {
 
             toWhomMap =  ResourceLoader.loadToWhomMap("references/toWhom.json");
@@ -99,37 +100,42 @@ public class TestLetterParser
             e.printStackTrace();
         }
 
-        List<Letter> letterList = new ArrayList<>();
+        List<Letter> entireLetterList = new ArrayList<>();
 
         List<Letter> rejectedLetters =  new ArrayList<>();   //a list for rejected letter to review and improve the algorithm
 
-        //get аll letters
-        Set<DocumentPointer> documentPointers = new TreeSet<>();
+        Set<DocumentPointer> documentPointers = new TreeSet<>(); //a document pointer points to a particular file that contains letters
 
         String homeDir = System.getProperty("user.home");
 
-//        EpubExtractor.getURIForAllLetters(documentPointers, homeDir + "/Documents/Tolstoy/unzipLettersSpecial/pisma_k_Sofie_83-84(1)", true);
-//        Person person = new Person();
-//        person.setLastName("Толстой");
-//        person.setFirstName("Софье");
-//        person.setPaternalName("Андреевне");
+        EpubExtractor.getURIForAllLetters(documentPointers, homeDir + "/IdeaProjects/Colloquy/samples/volumes/expanded/tom_83_pisma_sa_tolstoy", true);
+        EpubExtractor.getURIForAllLetters(documentPointers, homeDir + "/IdeaProjects/Colloquy/samples/volumes/expanded/tom_84_pisma_sa_tolstoy", true);
 
 
-//        getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLettersSpecial/Pisma_k_Chertkovu_toma_87-89", true);
-//        getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLettersSpecial/Pisma_k_Chertkovu_toma_87-89", true);
-//        Person person = new Person();
-//        person.setLastName("Черткову");
-//        person.setFirstName("В");
-//        person.setPaternalName("Г");
+//        EpubExtractor.getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLettersSpecial/Pisma_k_Chertkovu_toma_87-89", true);
+//        EpubExtractor.getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLettersSpecial/Pisma_k_Chertkovu_toma_87-89", true);
+
+
+        EpubExtractor.getURIForAllLetters(documentPointers, homeDir + "/IdeaProjects/Colloquy/samples/volumes/expanded/85_tom_chertkovy", true);
+        EpubExtractor.getURIForAllLetters(documentPointers, homeDir + "/IdeaProjects/Colloquy/samples/volumes/expanded/86_tom_chertkovy", true);
+        EpubExtractor.getURIForAllLetters(documentPointers, homeDir + "/IdeaProjects/Colloquy/samples/volumes/expanded/87_tom_chertkovy", true);
+        EpubExtractor.getURIForAllLetters(documentPointers, homeDir + "/IdeaProjects/Colloquy/samples/volumes/expanded/88_tom_chertkovy", true);
+        EpubExtractor.getURIForAllLetters(documentPointers, homeDir + "/IdeaProjects/Colloquy/samples/volumes/expanded/89_tom_chertkovy", true);
+
+
 
 
         //Here we collect all URIs to files containing letter details are in EpubExtractor
-        EpubExtractor.getURIForAllLetters(documentPointers, homeDir + "/IdeaProjects/Colloquy/samples/volumes/expanded", false);
-
+//        -----  UNCOMMENT for ALL OTHER LETTERS
+      EpubExtractor.getURIForAllLetters(documentPointers, homeDir + "/IdeaProjects/Colloquy/samples/volumes/expanded", false);
+//
+//
         Person person = null;
+        //------------
 
         Map<String, List<DocumentPointer>> volumeMap = new LinkedHashMap<>();
 
+        //now we collect all URI pointers to each decompressed volume a volume can contain more than one source and we create a map here
         for (DocumentPointer pointer : documentPointers)
         {
             if (volumeMap.containsKey(pointer.getSourse()))
@@ -145,24 +151,31 @@ public class TestLetterParser
 
         }
 
+        //for each volume
+
         for (String volume: volumeMap.keySet())
         {
-            letterList.clear();
+            List<Letter> letterList = new ArrayList<>();
 
+            //and for each document pointer
             for (DocumentPointer dp: volumeMap.get(volume))
             {
-                //for every pointer we get letter - this is the core code for extracting letters
-                us.colloquy.util.LetterParser.parseLetters(dp, letterList, person, toWhomMap, rejectedLetters);   //test case "temp/OEBPS/Text/0001_1006_2002.xhtml"
+                //for every pointer we get a letter - this is the core code for parsing letters
+                //PAY ATTENTION
+                us.colloquy.util.LetterParser.parseLetters(dp, letterList, person, toWhomMap, rejectedLetters);
+                //test case "temp/OEBPS/Text/0001_1006_2002.xhtml"
             }
+
+            entireLetterList.addAll(letterList);
 
             System.out.println("---------------------------------------------------------- rejected ");
 
-            System.out.println(" Letters: " + letterList.size() + " Rejected letters: " + rejectedLetters.size());
+            System.out.println("All selected letters:" + entireLetterList.size() + ";" +
+                    " Letters: " + letterList.size() + "; Total number of rejected letters: " + rejectedLetters.size());
 
             try
             {
                 ObjectWriter ow = new com.fasterxml.jackson.databind.ObjectMapper().writer().withDefaultPrettyPrinter();
-
 
                 System.out.println("-------------------- Start rejected letters ------------- ");
 
@@ -174,16 +187,18 @@ public class TestLetterParser
 
                 json = ow.writeValueAsString(letterList);
 
-                System.out.println("-------------------- Start letters ------------- ");
+                System.out.println("-------------------- Start processing selected letters ------------- ");
 
-                String origin = letterList.get(0).getSource();
-
-                try (Writer out = new BufferedWriter(new OutputStreamWriter(
-                        new FileOutputStream("parsed/letters/" + volume.replaceAll("Полное собрание сочинений. ","").replaceAll("Том","Volume")
-                                .trim().replaceAll("\\s","_").trim() + ".json"), "UTF-8")))
+                //write json to file if export is set to true
+                if (properties.getProperty("export_to_json").equalsIgnoreCase("true"))
                 {
-                    out.write(json);
+                    try (Writer out = new BufferedWriter(new OutputStreamWriter(
+                            new FileOutputStream("parsed/letters/" + volume.replaceAll("Полное собрание сочинений. ", "").replaceAll("Том", "Volume")
+                                    .trim().replaceAll("\\s", "_").trim() + ".json"), "UTF-8")))
+                    {
+                        out.write(json);
 
+                    }
                 }
 
                 //print to a file
@@ -202,10 +217,39 @@ public class TestLetterParser
         }
 
         //code below to check a few letters
+        //testFewLetters(entireLetterList);
 
+
+        if (properties.getProperty("upload_to_elastic").equalsIgnoreCase("true"))
+        {
+            uploadLettersToElasticServer(properties, entireLetterList);
+        }
+
+//        // write your code here
+//        Settings settings = Settings.settingsBuilder()
+//                .put("cluster.name", properties.getProperty("elastic_cluster_name")).build();
+//
+//        //open index balk load all letters and process them
+//        try (Client client = TransportClient.builder().settings(settings).build()
+//                .addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
+//        {
+//            BulkRequestBuilder bulkRequest = client.prepareBulk();
+//
+//            //this is strait forward indexing - for test and validation just comment it out
+//            indexLetters(letterList, client, bulkRequest);
+//
+//
+//        } catch (Throwable t)
+//        {
+//            t.printStackTrace();
+//        }
+    }
+
+    private void testFewLetters(List<Letter> entireLetterList)
+    {
         int i = 0;
 
-        for (Letter letter : letterList)
+        for (Letter letter : entireLetterList)
         {
             i++;
 
@@ -216,10 +260,10 @@ public class TestLetterParser
 
             }
 
-//            if (i > 15)
-//            {
-//                break;
-//            }
+            if (i > 15)
+            {
+                break;
+            }
         }
 
 
@@ -229,10 +273,11 @@ public class TestLetterParser
 
         ObjectWriter ow = new com.fasterxml.jackson.databind.ObjectMapper().writer().withDefaultPrettyPrinter();
 
-        for (Letter letter : letterList)
+        for (Letter letter : entireLetterList)
         {
 //                if (letter.getDate() == null)
 //                {
+
             for (Person p : letter.getTo())
             {
 //                        if (StringUtils.isNotEmpty(person.getLastName()))
@@ -270,26 +315,6 @@ public class TestLetterParser
             //}
 
         }
-
-
-//        // write your code here
-//        Settings settings = Settings.settingsBuilder()
-//                .put("cluster.name", properties.getProperty("elastic_cluster_name")).build();
-//
-//        //open index balk load all letters and process them
-//        try (Client client = TransportClient.builder().settings(settings).build()
-//                .addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
-//        {
-//            BulkRequestBuilder bulkRequest = client.prepareBulk();
-//
-//            //this is strait forward indexing - for test and validation just comment it out
-//            indexLetters(letterList, client, bulkRequest);
-//
-//
-//        } catch (Throwable t)
-//        {
-//            t.printStackTrace();
-//        }
     }
 
 
@@ -361,6 +386,9 @@ public class TestLetterParser
         String previousYear = "1866";
         
         String tail = "1899 г. Октября 22. Я. П.";
+
+
+        tail = "1883 г. Середина декабря. Москва.";
 
         RussianDate.parseDateAndPlace(letter, tail, previousYear);  //a parser that figures out date and place if they are pres
 

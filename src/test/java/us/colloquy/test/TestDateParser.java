@@ -73,8 +73,6 @@ public class TestDateParser
         System.out.println(getId("* 174. Д. К. Рихау."));
 
 
-
-
     }
 
     private static String getId(String filteredString)

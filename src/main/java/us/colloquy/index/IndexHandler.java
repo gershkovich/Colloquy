@@ -19,12 +19,16 @@ package us.colloquy.index;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
+import org.apache.commons.collections.set.ListOrderedSet;
+import org.elasticsearch.common.transport.TransportAddress;
+import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.transport.client.PreBuiltTransportClient;
 import us.colloquy.model.DiaryEntry;
 import us.colloquy.model.DocumentPointer;
 import us.colloquy.model.Letter;
 import us.colloquy.model.Person;
 import us.colloquy.util.DiaryParser;
+import us.colloquy.util.ElasticLoader;
 import us.colloquy.util.LetterParser;
 import org.apache.commons.lang.StringUtils;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
@@ -36,22 +40,22 @@ import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.client.transport.TransportClient;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.junit.Test;
 import us.colloquy.util.ResourceLoader;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.net.InetAddress;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Stream;
+
+import static us.colloquy.util.ElasticLoader.uploadLettersToElasticServer;
+import static us.colloquy.util.ElasticLoader.uploadDiariesToElasticServer;
 
 /**
  * Created by Peter Gershkovich on 12/20/15.
@@ -62,6 +66,7 @@ public class IndexHandler
      * Run this method to load typical Tolstoy letters
      * Should be run after creating tolstoy index see command below
      */
+
     @Test
     public void loadLetterIndex()
     {
@@ -69,7 +74,7 @@ public class IndexHandler
 
         List<Letter> letterList = new ArrayList<>();
 
-        List<Letter> rejectedLetters =  new ArrayList<>();   //a list for rejected letter to review and improve the algorithm
+        List<Letter> rejectedLetters = new ArrayList<>();   //a list for rejected letter to review and improve the algorithm
 
         //get аll letters
         Set<DocumentPointer> documentPointers = new TreeSet<>();
@@ -92,12 +97,12 @@ public class IndexHandler
 //        person.setPaternalName("Григорьевич");
 //        person.setOriginalEntry("Черткову В.Г.");
 
-
         getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLetters", false);
 
         Person person = null;
 
         Map<String, String> toWhomMap = null;
+
         //load map of addressees
         try
         {
@@ -175,29 +180,7 @@ public class IndexHandler
 
         if (properties.getProperty("upload_to_elastic").equalsIgnoreCase("true"))
         {
-            uploadToElasticServer(properties, letterList);
-        }
-    }
-
-    private void uploadToElasticServer(Properties properties, List<Letter> letterList)
-    {
-        Settings settings = Settings.builder()
-                .put("cluster.name", properties.getProperty("elastic_cluster_name")).build();
-
-
-        try (TransportClient client = new PreBuiltTransportClient(settings).
-                addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
-        {
-
-            BulkRequestBuilder bulkRequest = client.prepareBulk();
-
-            //this is strait forward indexing - for test and validation just comment it out
-            indexLetters(letterList, client, bulkRequest);
-
-
-        } catch (Throwable t)
-        {
-            t.printStackTrace();
+            uploadLettersToElasticServer(properties, letterList);
         }
     }
 
@@ -209,186 +192,221 @@ public class IndexHandler
 
         List<DiaryEntry> diaryEntries = new ArrayList<>();
 
-        //get аll letters
-        Set<DocumentPointer> documentPointers = new TreeSet<>();
+        List<DocumentPointer> documentPointers = new ArrayList<>();
 
         //  getURIForAllDiaries(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/openDiaries");
+        //
+        String strPathToDiaries = "samples/diaries";
 
+        //find all volumes with diaries
+        Path pathToDiaries = FileSystems.getDefault().getPath(strPathToDiaries);
 
-        getURIForAllDiaries(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/90-volume-set/diaries/uzip");
+        List<Path> listOfDiaryVolumes = new ArrayList<>();
 
-        for (DocumentPointer pointer : documentPointers)
+        int maxDepth = 1;
+
+        try (Stream<Path> stream = Files.find(pathToDiaries, maxDepth, (path, attr) ->
         {
-            DiaryParser.parseDiaries(pointer, diaryEntries);   //test case "temp/OEBPS/Text/0001_1006_2002.xhtml"
+            return String.valueOf(path).contains("dnevnik");
+        }))
+        {
+            stream.forEach(listOfDiaryVolumes::add);
 
+
+        } catch (IOException e)
+        {
+            e.printStackTrace();
         }
 
-        System.out.println("Total number of letters: " + diaryEntries.size());
+        int diaryCounter = 0;
 
-        //code below to check a few letters
-        int i = 0;
-        for (DiaryEntry diaryEntry : diaryEntries)
+        File  entries_debug = new File("entries_debug.txt");
+
+        entries_debug.delete();
+
+        try (FileWriter fw = new FileWriter("entries_debug.txt", true);
+             BufferedWriter bw = new BufferedWriter(fw);
+             PrintWriter outDebug = new PrintWriter(bw))
         {
-            i++;
+            outDebug.println("start file");
+            //more code
 
-
-            if (diaryEntry.getDate() == null)
+            for (Path path : listOfDiaryVolumes)
             {
-                System.out.println(" ------------------------------------------------------------------");
-                System.out.println(diaryEntry.toString());
+                documentPointers.clear();
 
+                getURIForAllDiaries(documentPointers, path);
+
+                diaryEntries.clear();
+
+                for (DocumentPointer pointer : documentPointers)
+                {
+                    List<DiaryEntry> diaryEntriesInPointer = new ArrayList<>();
+
+                    DiaryParser.parseDiaries(pointer, diaryCounter++, diaryEntriesInPointer, outDebug);   //test case "temp/OEBPS/Text/0001_1006_2002.xhtml"
+
+                    //find if anything is wrong in a pointer
+
+                    for (DiaryEntry diaryEntry : diaryEntriesInPointer)
+                    {
+                        if (diaryEntry.getDate() == null || diaryEntry.getEntry().length() < 20)
+                        {
+                            System.out.println(" Missing entry:  --------------- " + pointer.getUri() + " ---------------------------------");
+                            System.out.println(diaryEntry.toString());
+
+                        }
+                    }
+
+                    diaryEntries.addAll(diaryEntriesInPointer);
+                }
+
+                System.out.println("Total number of diaries in " + path.getFileName() + ": " + diaryEntries.size());
+
+                //code below to set ids and check a few letters
+                int i = 0;
+
+                for (DiaryEntry diaryEntry : diaryEntries)
+                {
+                    i++;
+
+                    String id = "D-" + path.getFileName().toString().replaceAll(".*_", "") + "-" + i;
+
+                    diaryEntry.setId(id);
+                }
+
+                System.out.println("Total number of diaries in volume: " + diaryEntries.size());
+
+                //export json files
+
+                try
+                {
+                    ObjectWriter ow = new com.fasterxml.jackson.databind.ObjectMapper().writer().withDefaultPrettyPrinter();
+
+
+                    String json = ow.writeValueAsString(diaryEntries);
+
+                    System.out.println("-------------------- Start exporting diaries in Volume " + path.getFileName() + " ------------- ");
+
+                    //   String origin = diaryEntries.get(0).getSource();
+
+                    String fileName = "parsed/diaries/" + path.getFileName() + ".json";
+
+                    try (Writer out = new BufferedWriter(new OutputStreamWriter(
+                            new FileOutputStream(fileName), "UTF-8")))
+                    {
+                        out.write(json);
+
+                    }
+
+                    System.out.println("-------------------- End of export in Volume " + path.getFileName() + " ------------- ");
+
+
+                } catch (Exception e)
+                {
+                    e.printStackTrace();
+                }
+
+
+                if (properties.getProperty("upload_to_elastic").equalsIgnoreCase("true"))
+                {
+
+                    ElasticLoader.uploadDiariesToElasticServer(properties, diaryEntries);
+                }
             }
 
-//            if (i > 15)
-//            {
-//                break;
-//            }
+            outDebug.println("end file");
+            //more code
+        } catch (IOException e)
+        {
+            //exception handling left as an exercise for the reader
         }
 
-        // write your code here
-//        Settings settings = Settings.settingsBuilder()
-//                .put("cluster.name", properties.getProperty("elastic_cluster_name")).build();
-//
-//        //open index balk load all letters and process them
-//        try (Client client = TransportClient.builder().settings(settings).build()
-//                .addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
-//        {
-
-        Settings settings = Settings.builder()
-                .put("cluster.name", properties.getProperty("elastic_cluster_name")).build();
-
-
-        try (TransportClient client = new PreBuiltTransportClient(settings).addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
-        {
-
-
-            BulkRequestBuilder bulkRequest = client.prepareBulk();
-
-            //this is strait forward indexing - for test and validation just comment it out
-            indexDocuments(diaryEntries, client, bulkRequest);
-
-
-        } catch (Throwable t)
-        {
-            t.printStackTrace();
-        }
-    }
-
-    private void indexDocuments(List<DiaryEntry> diaryEntries, Client client, BulkRequestBuilder bulkRequest) throws JsonProcessingException
-    {
-        ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
-
-
-        for (DiaryEntry diaryEntry : diaryEntries)
-        {
-            String json = ow.writeValueAsString(diaryEntry);
-
-            bulkRequest.add(client.prepareIndex("tolstoy", "diaries")
-                    .setSource(json)
-            );
-
-        }
-
-        BulkResponse bulkResponse = bulkRequest.get();
-
-        if (bulkResponse.hasFailures())
-        {
-            // process failures by iterating through each bulk response item
-            for (BulkItemResponse br : bulkResponse.getItems())
-            {
-                System.out.println(br.getFailureMessage());
-            }
-
-        }
-    }
-
-    private void indexLetters(List<Letter> letterList, Client client, BulkRequestBuilder bulkRequest) throws JsonProcessingException
-    {
-        ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
-
-
-        for (Letter letter : letterList)
-        {
-            String json = ow.writeValueAsString(letter);
-
-            String name = "unk";
-
-            if (letter.getTo().size() > 0)
-            {
-                name = letter.getTo().get(0).getLastName();
-
-            }
-
-            String id = letter.getId() + "-" + letter.getDate() + "-" + letter.getSource();
-
-            bulkRequest.add(client.prepareIndex("tolstoy", "letters", id)
-                    .setSource(json)
-            );
-
-        }
-
-        BulkResponse bulkResponse = bulkRequest.get();
-
-        if (bulkResponse.hasFailures())
-        {
-            // process failures by iterating through each bulk response item
-            for (BulkItemResponse br : bulkResponse.getItems())
-            {
-                System.out.println(br.getFailureMessage());
-            }
-
-        }
     }
 
     @Test
     public void mapIndex()
     {
+        String indexName = "tolstoy_letters";
 
-        String indexName = "tolstoy";
+//        String mapping = "{\n" +
+//                "      \"letters\": {\n" +
+//                "        \"properties\": {\n" +
+//                "          \"content\": {\n" +
+//                "            \"type\": \"string\"\n" +
+//                "          },\n" +
+//                "          \"date\": {\n" +
+//                "            \"type\": \"date\"\n" +
+////                "            \"format\": \"yyyy-MM-dd\"\n" +
+//                "          },\n" +
+//                "          \"id\": {\n" +
+//                "            \"type\": \"string\"\n" +
+//                "          },\n" +
+//                "          \"notes\": {\n" +
+//                "            \"type\": \"string\"\n" +
+//                "          },\n" +
+//                "          \"place\": {\n" +
+//                "            \"type\": \"string\"\n" +
+//                "          },\n" +
+//                "          \"to\": {\n" +
+//                "             \"properties\": {\n" +
+//                "              \"firstName\": {\n" +
+//                "                \"type\": \"string\"\n" +
+//                "              },\n" +
+//                "              \"lastName\": {\n" +
+//                "                \"type\": \"string\"\n" +
+//                "              },\n" +
+//                "              \"originalEntry\": {\n" +
+//                "                \"type\": \"string\"\n" +
+//                "              },\n" +
+//                "              \"paternalName\": {\n" +
+//                "                \"type\": \"string\"\n" +
+//                "              }\n" +
+//                "            }\n" +
+//                "          },\n" +
+//                "          \"source\": {\n" +
+//                "            \"type\": \"string\"\n" +
+//                "          }\n" +
+//                "        }\n" +
+//                "        }\n" +
+//                "      }";
 
-        String type = "letters";
+        String mapping = "{\"content\": {\n" +
+                "\"type\": \"text\"\n" +
+                "},\n" +
+                "\"date\": {\n" +
+                "\"type\": \"date\"\n" +
+                "},\n" +
+                "\"id\": {\n" +
+                "\"type\": \"keyword\"\n" +
+                "},\n" +
+                "\"notes\": {\n" +
+                "\"type\": \"text\"\n" +
+                "},\n" +
+                "\"place\": {\n" +
+                "\"type\": \"text\"\n" +
+                "},\n" +
+                "\"source\": {\n" +
+                "\"type\": \"text\"\n" +
+                "},\n" +
+                "\"to\": {\n" +
+                "\"properties\": {\n" +
+                "\"firstName\": {\n" +
+                "\"type\": \"text\"\n" +
+                "},\n" +
+                "\"lastName\": {\n" +
+                "\"type\": \"text\"\n" +
+                "},\n" +
+                "\"originalEntry\": {\n" +
+                "\"type\": \"text\"\n" +
+                "},\n" +
+                "\"paternalName\": {\n" +
+                "\"type\": \"text\"\n" +
+                "}\n" +
+                "}\n" +
+                "}\n" +
+                "}";
 
-        String mapping = "{\n" +
-                "      \"letters\": {\n" +
-                "        \"properties\": {\n" +
-                "          \"content\": {\n" +
-                "            \"type\": \"string\"\n" +
-                "          },\n" +
-                "          \"date\": {\n" +
-                "            \"type\": \"date\"\n" +
-//                "            \"format\": \"yyyy-MM-dd\"\n" +
-                "          },\n" +
-                "          \"id\": {\n" +
-                "            \"type\": \"string\"\n" +
-                "          },\n" +
-                "          \"notes\": {\n" +
-                "            \"type\": \"string\"\n" +
-                "          },\n" +
-                "          \"place\": {\n" +
-                "            \"type\": \"string\"\n" +
-                "          },\n" +
-                "          \"to\": {\n" +
-                "             \"properties\": {\n" +
-                "              \"firstName\": {\n" +
-                "                \"type\": \"string\"\n" +
-                "              },\n" +
-                "              \"lastName\": {\n" +
-                "                \"type\": \"string\"\n" +
-                "              },\n" +
-                "              \"originalEntry\": {\n" +
-                "                \"type\": \"string\"\n" +
-                "              },\n" +
-                "              \"paternalName\": {\n" +
-                "                \"type\": \"string\"\n" +
-                "              }\n" +
-                "            }\n" +
-                "          },\n" +
-                "          \"source\": {\n" +
-                "            \"type\": \"string\"\n" +
-                "          }\n" +
-                "        }\n" +
-                "        }\n" +
-                "      }";
+
 
 
         /*
@@ -430,14 +448,11 @@ public class IndexHandler
                 .put("cluster.name", properties.getProperty("elastic_cluster_name")).build();
 
 
-        try (TransportClient client = new PreBuiltTransportClient(settings).addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
+        try (TransportClient client = new PreBuiltTransportClient(settings).addTransportAddress(new TransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
         {
-
-
             // re-create index if it is  already exists.
             if (client.admin().indices().prepareExists(indexName).execute().actionGet().isExists())
             {
-
                 final DeleteIndexRequest deleteIndexRequest = new DeleteIndexRequest(indexName);
 
                 final DeleteIndexResponse deleteIndexResponse = client.admin().indices().delete(deleteIndexRequest).actionGet();
@@ -453,7 +468,27 @@ public class IndexHandler
 
             client.admin().indices().prepareCreate(indexName).execute().actionGet();
 
-            PutMappingResponse response = client.admin().indices().preparePutMapping(indexName).setType(type).setSource(mapping).execute().actionGet();
+            //  PutMappingResponse response = client.admin().indices().preparePutMapping(indexName).setType(type).setSource(mapping).execute().actionGet();
+
+
+//            PutMappingResponse response =     client.admin().indices().prepareCreate(indexName)
+//                    .addMapping("tweet", "{\n" +
+//                            "    \"tweet\": {\n" +
+//                            "      \"properties\": {\n" +
+//                            "        \"message\": {\n" +
+//                            "          \"type\": \"text\"\n" +
+//                            "        }\n" +
+//                            "      }\n" +
+//                            "    }\n" +
+//                            "  }")
+//                    .get();
+
+
+            PutMappingResponse response = client.admin().indices().preparePutMapping(indexName)
+                    .setType("letters")
+                    .setSource(mapping)
+                    .get();
+
 
             if (!response.isAcknowledged())
             {
@@ -465,7 +500,6 @@ public class IndexHandler
             t.printStackTrace();
         }
     }
-
 
     public void getURIForAllLetters(Set<DocumentPointer> uriList, String letterDirectory, boolean useOnlyNumber)
     {
@@ -500,7 +534,6 @@ public class IndexHandler
 
         System.out.println("files: " + results.size());
 
-
         try
         {
 
@@ -528,7 +561,6 @@ public class IndexHandler
                     }
                 }
 
-
                 for (Element element : doc.getElementsByTag("navPoint"))
                 {
                     //Letter letter = new Letter();
@@ -545,7 +577,6 @@ public class IndexHandler
                             {
                                 System.out.println("------------------");
                             }
-
 
                             String url = child.getElementsByTag("content").attr("src");
 
@@ -575,7 +606,6 @@ public class IndexHandler
                             {
                                 // System.out.println("nav point: " + label + " src " + child.getElementsByTag("content").attr("src"));
                             }
-
 
                         }
                     }
@@ -608,10 +638,7 @@ public class IndexHandler
             {
                 properties.loadFromXML(propertiesFileInputStream);
 
-//                properties.list(System.out);
-
                 propertiesFileInputStream.close();
-
 
             } else
             {
@@ -629,12 +656,8 @@ public class IndexHandler
     }
 
 
-    public void getURIForAllDiaries(Set<DocumentPointer> documentPointers, String letterDirectory)
+    public void getURIForAllDiaries(List<DocumentPointer> documentPointers, Path pathToLetters)
     {
-
-
-        Path pathToLetters = FileSystems.getDefault().getPath(letterDirectory);
-
         List<Path> results = new ArrayList<>();
 
         int maxDepth = 6;

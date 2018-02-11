@@ -35,6 +35,8 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Attribute;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.jsoup.nodes.TextNode;
+import org.jsoup.select.Elements;
 import org.junit.Test;
 import org.xml.sax.Attributes;
 import org.xml.sax.ContentHandler;
@@ -217,7 +219,7 @@ public class TestExtractor
 
        // File input = new File("samples/OEBPS/Text/0001_1006_2001.xhtml");
 
-        File input = new File("samples/pisma-1904/OEBPS/Text/0001_1006_2002.html");
+        File input = new File("samples/pisma-1904/OEBPS/Text/single_doc.html");
 
         try
         {
@@ -296,7 +298,32 @@ public class TestExtractor
                     } else
                     {
                         //System.out.println(child.text() );
-                        content.append(child.text()).append("\n");
+
+                        Elements elements = child.getElementsByTag("sup");
+
+                        for(Element e : elements)
+                        {
+                            String value = e.text();
+
+                            e.replaceWith(new TextNode("[" + value + "]", null));
+                        }
+
+
+                        for (Element el : child.getAllElements())
+                        {
+                           // System.out.println(el.tagName());
+                           if ("sup".equalsIgnoreCase(el.tagName()))
+                           {
+                               content.append(" [" + el.text() +"] ");
+                           } else
+                           {
+                               content.append(el.text());
+                           }
+
+
+                        }
+
+                        content.append("\n");
 
                     }
 
@@ -315,15 +342,14 @@ public class TestExtractor
             {
 //                if (letter.getDate() == null)
 //                {
-                for (Person person : letter.getTo())
-                {
+
 //                        if (StringUtils.isNotEmpty(person.getLastName()))
 //                        {
                     String json = ow.writeValueAsString(letter);
 
                     System.out.println(json);
 //                        }
-                }
+
                 //}
 
             }

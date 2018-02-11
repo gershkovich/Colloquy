@@ -21,6 +21,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.jsoup.nodes.TextNode;
 import org.jsoup.select.Elements;
 import org.junit.Assert;
 import org.junit.Test;
@@ -37,6 +38,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import static us.colloquy.util.CommonTextParser.оldCyrillicFilter;
 
 /**
  * Created by Peter Gershkovich on 12/20/15.
@@ -61,7 +64,6 @@ public class LetterParser
     {
         File input = new File(documentPointer.getUri());
 
-
         try
         {
             Document doc = Jsoup.parse(input, "UTF-8"); //document now contains files split by tags with their entire content
@@ -72,7 +74,6 @@ public class LetterParser
 
             for (Element element : doc.getElementsByClass("section")) //we are interested in sections
             {
-
 
                 if (element.getElementsByTag("p").size() == 0)  //that simply means that there is no content and that is not a letter that can be considered
                 {
@@ -130,6 +131,7 @@ public class LetterParser
 
                     for (Element child : element.children())
                     {
+                        replaceSupTag(child);
 
 //                        for (Attribute att : child.attributes())
 //                        {
@@ -154,10 +156,10 @@ public class LetterParser
                             String toWhom = child.getElementsByTag("strong").text();
 
                             if (toWhom.contains("193. М. С. Башилову."))
-                        {
-                            String stop = "";
+                            {
+                                String stop = "";
 
-                        }
+                            }
 
                             //find to whom from the index
                             String volume = letter.getSource().replaceAll("\\D", "").trim();
@@ -168,7 +170,35 @@ public class LetterParser
 
                                 String letterId = extractId(toWhom.trim());
 
-                                String toWhomFromMap = toWhomMap.get(volume + "-" + letterId);
+                                String toWhomFromMap = null;
+
+                                if (volume.equalsIgnoreCase("83") || volume.equalsIgnoreCase("84"))
+                                {
+                                    toWhomFromMap = "Толстой Софье Андреевне";
+
+                                    person = new Person();
+                                    person.setLastName("Толстой");
+                                    person.setFirstName("Софье");
+                                    person.setPaternalName("Андреевне");
+                                    person.setOriginalEntry("not found");
+
+                                } else if (volume.equalsIgnoreCase("85") || volume.equalsIgnoreCase("86")
+                                        || volume.equalsIgnoreCase("87") || volume.equalsIgnoreCase("88") || volume.equalsIgnoreCase("89"))
+                                {
+                                    toWhomFromMap = "Черткову Владимиру Григорьевичу";
+
+                                    person = new Person();
+                                    person.setLastName("Черткову");
+                                    person.setFirstName("Владимиру");
+                                    person.setPaternalName("Григорьевичу");
+                                    person.setOriginalEntry("not found");
+
+
+                                } else
+                                {
+
+                                    toWhomFromMap = toWhomMap.get(volume + "-" + letterId);
+                                }
 
                                 letter.setToWhom(toWhomFromMap);
 
@@ -196,10 +226,11 @@ public class LetterParser
                             {
                                 letter.getTo().add(person);
 
+
                                 if (StringUtils.isNotEmpty(toWhom) && toWhom.matches(".{0,3}\\d{1,4}.{0,3}"))
                                 {
 
-                                   // letter.setId(toWhom.replaceAll("\\D", ""));
+                                    // letter.setId(toWhom.replaceAll("\\D", ""));
 
                                 }
 
@@ -212,7 +243,7 @@ public class LetterParser
 
                             String tail = entireText.replace(toWhom, "");
 
-                            if (StringUtils.isNotEmpty(tail) && letter.getDate()==null) //only if date is not already set
+                            if (StringUtils.isNotEmpty(tail) && letter.getDate() == null) //only if date is not already set
                             {
                                 RussianDate.parseDateAndPlace(letter, tail, previousYear);
                             }
@@ -224,10 +255,32 @@ public class LetterParser
                         if ("Data".equalsIgnoreCase(child.className()))
                         {
 
+                            //find out if child has text or it is an em element
+                            String directChild = child.text();
+
+                            if (person !=null)
+                            {
+                                person.setOriginalEntry(directChild);
+                                letter.getTo().clear();
+                                letter.getTo().add(person);
+
+                            } else
+                            {
+                                System.out.println("Error - " + letter);
+                            }
+
                             previousYear = parseDateAndPlace(previousYear, letter, child);
 
                             // System.out.println("when and where\t " + child.getElementsByTag("em").text());
 
+                            //if we don't have original entry at this point make data from that child
+                            if (letter.getTo().size() > 0 )
+                            {
+                                if (StringUtils.isNotEmpty(child.text()))
+                                {
+                                    letter.getTo().get(0).setOriginalEntry(child.text());
+                                }
+                            }
 
                         } else if ("table".equalsIgnoreCase(child.tagName()))  //try to see if Date is there
                         {
@@ -237,6 +290,10 @@ public class LetterParser
                             {
 
                                 previousYear = parseDateAndPlace(previousYear, letter, child);
+
+                                String directChild = child.text();
+
+                                letter.getTo().get(0).setOriginalEntry(directChild);
 
                                 // System.out.println("when and where\t " + child.getElementsByTag("em").text());
 
@@ -250,6 +307,10 @@ public class LetterParser
                                         && letter.getDate() == null) //we still don't have date
                                 {
                                     previousYear = parseDateAndPlace(previousYear, letter, child);
+
+                                    String directChild = child.text();
+
+                                    letter.getTo().get(0).setOriginalEntry(directChild);
                                 }
 
                             }
@@ -258,12 +319,19 @@ public class LetterParser
                                 && letter.getDate() == null) //we still don't have date
                         {
                             previousYear = parseDateAndPlace(previousYear, letter, child);
+
+                            String directChild = child.text();
+
+                            letter.getTo().get(0).setOriginalEntry(directChild);
+
+
                         } else if ("petit".equalsIgnoreCase(child.className()) || "Textpetit_otstup".equalsIgnoreCase(child.className()))
                         {
-                            letter.getNotes().add(child.text());
+                            letter.getNotes().add(оldCyrillicFilter(child.text()));
 
                         } else
                         {
+
                             String text = child.text();
 
                             if (StringUtils.isNotEmpty(text))
@@ -316,6 +384,21 @@ public class LetterParser
         {
             e.printStackTrace();
         }
+
+    }
+
+    private static void replaceSupTag(Element child)
+    {
+        Elements elements = child.getElementsByTag("sup");
+
+        for(Element e : elements)
+        {
+            String value = e.text();
+
+            e.replaceWith(new TextNode("[" + value + "]", null));
+        }
+
+
 
     }
 
@@ -389,12 +472,6 @@ public class LetterParser
         return previousYear;
     }
 
-    private static String оldCyrillicFilter(String text)
-    {
-
-        return text.replaceAll("\\u0463", "е").replaceAll("\\u0462", "Е").
-                replaceAll("(\\u042A|\\u044A)\\b", "").replaceAll("\\u0456", "и").replaceAll("\\u0406", "И");
-    }
 
     @Test
     public void testOldCyrillicFilter()

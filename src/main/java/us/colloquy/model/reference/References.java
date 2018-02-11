@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 by Colloquy Digital Humanity group.
+ * Copyright (c) 2017. Tatyana Gershkovich
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,31 +14,28 @@
  * limitations under the License.
  */
 
-package us.colloquy.core;
+package us.colloquy.model.reference;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * Created by Peter Gershkovich on 9/5/16.
+ * Created by Peter Gershkovich on 7/15/17.
  */
-
-public class Colloquy
+@JsonIgnoreProperties(ignoreUnknown = true)
+public class References
 {
-    public static void main(String[] args)
+    private List<ToWhom> documents = new ArrayList<>();
+
+    public List<ToWhom> getDocuments()
     {
-        //run parser
-        Colloquy cq = new Colloquy();
-        cq.parseLetters();
+        return documents;
     }
 
-    private void parseLetters()
+    public void setDocuments(List<ToWhom> documents)
     {
-        System.out.println("Parsing letters");
-
-
-
-
+        this.documents = documents;
     }
 }
-
-
-

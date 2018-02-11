@@ -16,6 +16,8 @@
 
 package us.colloquy.util;
 
+import org.jsoup.nodes.TextNode;
+import org.jsoup.select.Elements;
 import us.colloquy.model.DiaryEntry;
 import us.colloquy.model.DocumentPointer;
 import org.apache.commons.lang.StringUtils;
@@ -26,12 +28,16 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import static us.colloquy.util.CommonTextParser.оldCyrillicFilter;
 
 /**
  * Created by Peter Gershkovich on 12/27/15.
@@ -150,34 +156,69 @@ public class DiaryParser
 
     /**
      * This is the hart of parsing process
-     *
-     * @param documentPointer
+     *  @param documentPointer
      * @param diaryEntries
+     * @param outDebug
      */
-    public static void parseDiaries(DocumentPointer documentPointer, List<DiaryEntry> diaryEntries)
+    public static void parseDiaries(DocumentPointer documentPointer, int pointerCounter, List<DiaryEntry> diaryEntries, PrintWriter outDebug)
     {
         File input = new File(documentPointer.getUri());
 
         String previousYear = "";
 
+        Date previousDate = null;
+
         try
         {
             Document doc = Jsoup.parse(input, "UTF-8");
 
-            for (Element element : doc.getElementsByClass("section"))
+            Elements elements = doc.getElementsByTag("title");
+
+
+            //exclude irrelevant sections
+            if (elements != null)
+            {
+                if (elements.size() > 1)
+                {//stop
+                   String stop =" x";
+                }
+
+                for (Element element : elements)
+                {
+                    String title =  element.text();
+                    //looks like one file has only one title!
+                    if (title.contains("ПРЕДИСЛОВИЕ") || title.contains("РЕДАКЦИОННЫЕ") || title.contains("РЕДАКТОРА") ||
+                            title.contains("ДНЕВНИКИ И ЗАПИСНЫЕ КНИЖКИ ТОЛСТОГО"))
+                    {
+                        return;   //no need for these documents
+                    }
+
+                   // System.out.println(documentPointer.getUri() + "\t" + element.text());
+                }
+            }
+
+
+            //process the rest
+
+            int elementCounter = 0;
+
+            for (Element element : doc.getElementsByClass("section"))   //now for each section in a document
             {
                 DiaryEntry diaryEntry = null;
 
                 StringBuilder contentBuilder = new StringBuilder();
-
+                              
                 for (Element child : element.children())
                 {
+                    replaceSupTag(child);  //replace all notes numbers written as superscript
+
                     DiaryEntry diaryEntryToCollectDate = new DiaryEntry();
 
                     //we send it in two cases when text matches year or when text has em element
                     Element em = child.select("em").first();
 
-                    if (em == null && StringUtils.isNotEmpty(child.text()))
+                    if (em == null && StringUtils.isNotEmpty(child.text()))  //this occur in section heading and is helpful to determine year since Tolstoy either did not mention it. It was implied. There was no year 1900 bug.
+
                     {
                         Matcher m = yearPattern.matcher(child.text());
 
@@ -195,6 +236,7 @@ public class DiaryParser
                                     if (StringUtils.isNotEmpty(prevYearTmp))
                                     {
                                         previousYear = prevYearTmp;
+
                                     }
                                 }
                             }
@@ -203,8 +245,24 @@ public class DiaryParser
                         }
                     }
 
-                    if (em != null)
+                    if (em != null && child.html().startsWith("<em>"))
                     {
+                        //get first em tag of a paragraph
+
+                       String fistEmTag =  оldCyrillicFilter(em.text()).replaceAll("(\\[|\\])","").replaceAll("\\."," ").replaceAll("(?iu)сегодня","").replaceAll("(?iu)нынче","").trim();
+
+//                        System.out.println((fistEmTag) + "\tFirst em tag" );
+
+                        //use this first tag to figure out date
+
+                        String emId = (pointerCounter + "-" + (elementCounter++));
+
+                        previousDate = parseDateOnly(previousDate, diaryEntry, fistEmTag, emId, outDebug);
+
+                        //logic is to make sure it is close to the previous date unless it is pretty clear.
+                        //let's find out if the gap between this date and previous date is more than a month and if a date is earlier than the one found before.
+
+
                         String prevYearTmp = parseDateAndPlace(previousYear, diaryEntryToCollectDate, child);
 
                         if (StringUtils.isNotEmpty(prevYearTmp))
@@ -213,17 +271,30 @@ public class DiaryParser
                         }
                     }
 
-                    if (diaryEntryToCollectDate.getDate() != null) //this is the begginng of a new entry
+                    if (diaryEntryToCollectDate.getDate() != null) //this is the beginng of a new entry
                     {
                         // System.out.println("Found date: " + diaryEntryToCollectDate.getDate());
                         //create new DiaryEntry
                         if (diaryEntry != null)
                         {
-                            diaryEntry.setEntry(contentBuilder.toString());   //add consecutive entries here
-                            if (StringUtils.isNotEmpty(diaryEntry.getEntry()))
+                            String content = contentBuilder.toString().trim();
+
+                            if (StringUtils.isNotEmpty(content) && content.length() > 35
+                                    && diaryEntry.getDate() != null)
                             {
-                                diaryEntries.add(diaryEntry);
+//                                if (content.matches("(?smi).*1847.*"))
+//                                {
+//                                    String stop = "";
+//                                }
+
+                                diaryEntry.setEntry(оldCyrillicFilter(content));
+                                diaryEntries.add(diaryEntry);                     //add consecutive entries here
+
+                            }  else if (content.length() > 0 && content.length() > 35)
+                            {
+                                System.out.println("removed entries: " + content);
                             }
+                            
                         }
 
                         diaryEntry = new DiaryEntry();
@@ -235,9 +306,9 @@ public class DiaryParser
 
                     }
 
-                    if (StringUtils.isNotEmpty(child.text()) && child.text().length() > 8)
+                    if (StringUtils.isNotEmpty(child.text()) && child.text().trim().length() > 0)
                     {
-                        contentBuilder.append(child.text() + "\n");
+                        contentBuilder.append(оldCyrillicFilter(child.text()) + "\n");
 
                     }
 //
@@ -246,11 +317,16 @@ public class DiaryParser
                 }
 
                 //whatever we still have, add here:
-                if (StringUtils.isNotEmpty(contentBuilder.toString().trim()) && diaryEntry != null)
+                String content = contentBuilder.toString().trim();
+
+                if (StringUtils.isNotEmpty(content) && content.length() > 35  && diaryEntry != null
+                        && diaryEntry.getDate() != null)
                 {
-                    diaryEntry.setEntry(оldCyrillicFilter(contentBuilder.toString()));
+
+                    diaryEntry.setEntry(content);
                     diaryEntries.add(diaryEntry);
                 }
+
             }
 
         } catch (IOException e)
@@ -262,23 +338,41 @@ public class DiaryParser
 
         //  System.out.println(documentPointer.toString() + " Letters: " + diaryEntries.size() + " Rejected letters: " + rejectedEntries.size());
 
-        for (DiaryEntry diaryEntry : diaryEntries)
-        {
-            System.out.println(diaryEntry.toString());
-        }
+//        for (DiaryEntry diaryEntry : diaryEntries)
+//        {
+//            System.out.println(diaryEntry.toString());
+//        }
 
         System.out.println("------------------------------  total documents cumulative " + diaryEntries.size() + "   ----------------------------");
 
 
     }
 
+    private static void replaceSupTag(Element child)
+    {
+        Elements elements = child.getElementsByTag("sup");
+
+        for(Element e : elements)
+        {
+            String value = e.text();
+
+            e.replaceWith(new TextNode("[" + value + "]", null));
+        }
+
+
+
+    }
     private static String parseDateAndPlace(String previousYear, DiaryEntry diaryEntry, Element child)
     {
-        if (child.getElementsByTag("em") != null && StringUtils.isNotEmpty(child.getElementsByTag("em").text()))
+        Elements elements = child.getElementsByTag("em"); //we need only first em
+
+        if ( elements != null && elements.size() > 0 && StringUtils.isNotEmpty(elements.get(0).text()))
         {
-            String letterDatePlace = оldCyrillicFilter(child.getElementsByTag("em").text()).replaceAll("\\*\\[\\]", "");
+            String letterDatePlace = оldCyrillicFilter(elements.get(0).text()).replaceAll("\\*\\[\\]", "");
 
             RussianDate.parseDateAndPlace(diaryEntry, letterDatePlace, previousYear);
+
+
 
             if (diaryEntry.getDate() != null)
             {
@@ -303,12 +397,17 @@ public class DiaryParser
         return previousYear;
     }
 
-    private static String оldCyrillicFilter(String text)
+
+    private static Date parseDateOnly(Date previousDate, DiaryEntry diaryEntry, String text, String entryId, PrintWriter outDebug)
     {
 
-        return text.replaceAll("\\u0463", "е").replaceAll("\\u0462", "Е").
-                replaceAll("(\\u042A|\\u044A)\\b", "").replaceAll("\\u0456", "и").replaceAll("\\u0406", "И");
+           return  RussianDate.parseDate( previousDate,  diaryEntry,  text,  entryId, outDebug );
+
+
     }
+
+
+
 
     @Test
     public void testOldCyrillicFilter()

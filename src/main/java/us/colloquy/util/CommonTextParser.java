@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 by Colloquy Digital Humanity group.
+ * Copyright (c) 2018. Tatyana Gershkovich
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,31 +14,22 @@
  * limitations under the License.
  */
 
-package us.colloquy.core;
-
+package us.colloquy.util;
 
 /**
- * Created by Peter Gershkovich on 9/5/16.
+ * Created by Peter Gershkovich on 2/6/18.
  */
-
-public class Colloquy
+public class CommonTextParser
 {
-    public static void main(String[] args)
+    public static String оldCyrillicFilter(String text)
     {
-        //run parser
-        Colloquy cq = new Colloquy();
-        cq.parseLetters();
-    }
 
-    private void parseLetters()
-    {
-        System.out.println("Parsing letters");
-
-
-
-
+        return text.replaceAll("\\u0463", "е").
+                replaceAll("\\u0462", "Е").
+                replaceAll("(\\u042A|\\u044A)\\b", "").
+                replaceAll("\\u0456", "и").
+                replaceAll("\\u0406", "И").
+                replaceAll("\\u045A","e").
+                replaceAll("\\u040A","E");
     }
 }
-
-
-

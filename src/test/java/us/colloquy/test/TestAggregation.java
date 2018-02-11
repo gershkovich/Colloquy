@@ -20,7 +20,7 @@ import org.elasticsearch.action.bulk.BulkRequestBuilder;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.client.transport.TransportClient;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.transport.InetSocketTransportAddress;
+import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.aggregations.Aggregation;
 import org.elasticsearch.search.aggregations.AggregationBuilders;
@@ -66,7 +66,7 @@ public class TestAggregation
                 .put("cluster.name", properties.getProperty("elastic_cluster_name")).build();
 
 
-        try (   TransportClient client = new PreBuiltTransportClient(settings).addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
+        try (   TransportClient client = new PreBuiltTransportClient(settings).addTransportAddress(new TransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
         {
 
             SearchResponse sr = client.prepareSearch("tolstoy")
@@ -77,7 +77,7 @@ public class TestAggregation
 
 
             InternalDateHistogram terms = sr.getAggregations().get("date_agg");
-            List<Histogram.Bucket> buckets = terms.getBuckets();
+            List<InternalDateHistogram.Bucket> buckets = terms.getBuckets();
 
           
 

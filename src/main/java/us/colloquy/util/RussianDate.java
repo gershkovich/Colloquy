@@ -23,8 +23,10 @@ import us.colloquy.model.DiaryEntry;
 import us.colloquy.model.Letter;
 import us.colloquy.model.Person;
 
+import java.io.PrintWriter;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -54,7 +56,11 @@ public class RussianDate
 
     final static Pattern patternToWhomNumberAnything = Pattern.compile("(\\d{1,3})\\.\\s{0,3}(.*)");
 
-    private final static  Map<String, String> locations = new HashMap<>();
+
+    //  final static Pattern seredina = Pattern.compile("(средина|сeредина|средина.|сeредина.)", Pattern.CASE_INSENSITIVE, Pattern.UNICODE_CASE);
+
+
+    private final static Map<String, String> locations = new HashMap<>();
 
     public static DateAndPlace parseDateAndPlace(String dateStr, String lastYearUsed)
     {
@@ -113,9 +119,7 @@ public class RussianDate
         locations.put("Я. П.", "Ясная Поляна");
         locations.put("Я П", "Ясная Поляна");
         locations.put("Я. П", "Ясная Поляна");
-
-
-
+        locations.put("Моста.", "Москва"); //this is one typo and can be corrected in a file as well
 
 
         String previouslyUsedYear = lastYearUsed;
@@ -183,9 +187,7 @@ public class RussianDate
         assembleDate(previouslyUsedYear, dateLocationElements, dap);
 
 
-            diaryEntry.setPlace(validatePlace(dap.getPlace().toString()));
-
-
+        diaryEntry.setPlace(validatePlace(dap.getPlace().toString()));
 
 
         SimpleDateFormat format = new SimpleDateFormat("dd MMM yyyy", new Locale("ru"));
@@ -236,22 +238,20 @@ public class RussianDate
         {
             if (locations.containsKey(place))
             {
-                return  locations.get(place);
+                return locations.get(place);
 
             } else
             {
                 if (place.matches("[A-ZА-Я].*"))
                 {
-                    return place.replaceAll("\\.","");
-                }
-                else
+                    return place.replaceAll("\\.", "");
+                } else
                 {
                     return "";
 
                 }
             }
-        }
-        else
+        } else
         {
             return "";
         }
@@ -296,31 +296,28 @@ public class RussianDate
                 dap.setDay(elCleared.replaceAll("(—|-).*", "").replaceAll("\\D", ""));
 
 
-            } else if (elCleared.matches("конец"))
+            } else if (elCleared.matches("(?iU)(конец|конец.)"))
             {
                 dap.setDay("25");
 
 
-            }
-            else if (elCleared.matches("(средина|сeредина|средина.|сeредина.)"))
+            } else if (elCleared.matches("(?iU)(средина|середина|средина.|середина.)"))   //1883 г. Середина декабря. Москва.
             {
                 dap.setDay("15");
 
 
-            }
-            else if (elCleared.matches("(начало)"))
+            } else if (elCleared.matches("(?iU)(начало|начало.)"))
             {
                 dap.setDay("5");
 
 
-            }   else if (elCleared.matches(("[^\\p{L}\\p{Nd}]+")))
+            } else if (elCleared.matches(("[^\\p{L}\\p{Nd}]+")))
             {
-               //skip it
+                //skip it
                 System.out.println("found dash");
 
 
-            }
-            else
+            } else
             {
 
                 String month = matchRussianMonth(elCleared, dap.getDay());
@@ -444,7 +441,7 @@ public class RussianDate
 
         if (m.find())
         {
-           // letter.setId(m.group(1));
+            // letter.setId(m.group(1));
 
 //            if (StringUtils.isNotEmpty(m.group(2)) && m.group(2).length() > 1)
 //            {
@@ -497,7 +494,7 @@ public class RussianDate
 
         if (m.find())
         {
-           // letter.setId(m.group(1));
+            // letter.setId(m.group(1));
 
             if (StringUtils.isNotEmpty(m.group(2)) && m.group(2).length() > 1)
             {
@@ -550,7 +547,6 @@ public class RussianDate
         Person person = new Person();
 
         person.setOriginalEntry(filteredString);
-
 
 
         if (m.find())
@@ -736,6 +732,30 @@ public class RussianDate
         }
 
         person.setFirstName(firstName);
+
+    }
+
+    public static Date parseDate(Date previousDate, DiaryEntry diaryEntry, String text, String entryId, PrintWriter outDebug)
+    {
+        //check if it looks like date.
+        //if it is just a number without anything it can be a date. To check that we need to see if it is immediately or a couple days after the previous date.
+
+        //convert to date based on previous month and year and see if the difference no more that 5 days
+        //need a trick to go over 31 - 1 step. One way to do that if date less then previous date go to the beggining of the month and add the number of days. So if we have 12 move to one and add date - 1 (12) and we getting 13. 13 is after 12 and within reasonable range. If number is higher than date, move to the end of the month and add a number of days Feb 27 and then we have 2 then 28 plus 2 is March 2nd and again is valid. That addresses all cases where date is there and a month or a year is not parsabe.
+
+        String clearedText = text.trim();
+
+        //step 1 - normalize date
+        if (clearedText.matches("\\d{1,2}.*"))
+        {
+            outDebug.println("date\t" + entryId + "\t" + clearedText);
+
+        } else
+        {
+            outDebug.println("text\t" + entryId + "\t" + clearedText);
+        }
+
+        return new Date();
 
     }
 }

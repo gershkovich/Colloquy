@@ -22,7 +22,7 @@ import org.elasticsearch.action.admin.indices.mapping.put.PutMappingResponse;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.client.transport.TransportClient;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.transport.InetSocketTransportAddress;
+import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.transport.client.PreBuiltTransportClient;
 import org.junit.Before;
 import org.junit.Test;
@@ -128,20 +128,12 @@ public class ManageIndex
                 "      }";
 
 
-//        Settings settings = Settings.settingsBuilder()
-//                .put("cluster.name", properties.getProperty("elastic_cluster_name")).build();
-//
-//        try (Client client = TransportClient.builder().settings(settings).build().addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName("127.0.0.1"), 9300)))
-//        {
-
         Settings settings = Settings.builder()
                 .put("cluster.name", "humanity").build();
 
 
-        try (   TransportClient client = new PreBuiltTransportClient(settings).addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName("127.0.0.1"), 9300)))
+        try (   TransportClient client = new PreBuiltTransportClient(settings).addTransportAddress(new TransportAddress(InetAddress.getByName("127.0.0.1"), 9300)))
         {
-
-
             //create index if it is not already exists.
             if (client.admin().indices().prepareExists(indexName).execute().actionGet().isExists())
             {
