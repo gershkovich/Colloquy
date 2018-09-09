@@ -16,20 +16,10 @@
 
 package us.colloquy.sandbox;
 
-import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
-import org.elasticsearch.action.admin.indices.delete.DeleteIndexResponse;
-import org.elasticsearch.action.admin.indices.mapping.put.PutMappingResponse;
-import org.elasticsearch.client.Client;
-import org.elasticsearch.client.transport.TransportClient;
-import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.transport.TransportAddress;
-import org.elasticsearch.transport.client.PreBuiltTransportClient;
 import org.junit.Before;
 import org.junit.Test;
 import us.colloquy.util.ResourceLoader;
 
-import java.io.IOException;
-import java.net.InetAddress;
 import java.util.Properties;
 
 /**
@@ -59,110 +49,6 @@ public class ManageIndex
     public void runScrolQuery()
 
     {
-
-        String indexName = "tolstoy";
-        String type = "chronicle";
-
-
-        /*
-        {
-    "mytype": {
-        "properties": {
-            "created": {
-                "type":   "multi_field",
-                "fields": {
-                    "created": { "type": "string" },
-                    "date":    { "type": "date"   }
-                }
-            }
-        }
-    }
-}
-
-
- {"mytype": {
-         "properties": {
-            "created": {
-                "type": "multi_field",
-                  "fields": {
-                     "created": {"type":"string"}
-                     "date":{"type":"date"}
-                     }
-                     }
-                     }
-                     }
-                     }
-
-                      "event": "Чтение книги Э. Ренана «L’avenir de la science» [«Будущее науки»]. «Вся блестит умом и тонкими, верными, глубокими замечаниями о самых важных предметах»; но «самоуверенность ученого непогрешимого поразительна» (п. к H. Н. Страхову 7 янв., Юб. 65, № 206; Д 25 янв.).",
-          "eventType": [],
-          "people": [
-            "Э. Ренан"
-          ],
-          "place": "Ясная Поляна",
-          "eventTime": -2492967600000,
-          "eventPeriod": null
-        }
-
-         */
-
-        String mapping = "{\n" +
-                "         \"chronicle\": {\n" +
-                "            \"properties\": {\n" +
-                "               \"event\": {\n" +
-                "                  \"type\": \"string\"\n" +
-                "               },\n" +
-                "               \"eventType\": {\n" +
-                "                  \"type\": \"string\"\n" +
-                "               },\n" +
-                "               \"people\": {\n" +
-                "                  \"type\": \"string\"\n" +
-                "               },\n" +
-                "               \"place\": {\n" +
-                "                  \"type\": \"string\"\n" +
-                "               },\n" +
-                "               \"eventTime\": {\n" +
-                "                  \"type\": \"date\"\n" +
-                "               }" +
-                "            }\n" +
-                "         }\n" +
-                "      }";
-
-
-        Settings settings = Settings.builder()
-                .put("cluster.name", "humanity").build();
-
-
-        try (   TransportClient client = new PreBuiltTransportClient(settings).addTransportAddress(new TransportAddress(InetAddress.getByName("127.0.0.1"), 9300)))
-        {
-            //create index if it is not already exists.
-            if (client.admin().indices().prepareExists(indexName).execute().actionGet().isExists())
-            {
-                final DeleteIndexRequest deleteIndexRequest=new DeleteIndexRequest(indexName);
-
-                final DeleteIndexResponse deleteIndexResponse= client.admin().indices().delete(deleteIndexRequest).actionGet();
-
-                if (!deleteIndexResponse.isAcknowledged()) {
-                    System.out.println("Not deleted");
-                }
-                else {
-                    System.out.println( indexName + " is deleted ");
-                }
-
-            }
-
-            client.admin().indices().prepareCreate(indexName).execute().actionGet();
-
-            PutMappingResponse response = client.admin().indices().preparePutMapping(indexName).setType(type).setSource(mapping).execute().actionGet();
-
-            if (!response.isAcknowledged())
-            {
-                System.out.println("Something strange happens");
-            }
-
-        } catch (IOException e)
-        {
-            System.out.println("Unable to create mapping");
-        }
 
     }
 

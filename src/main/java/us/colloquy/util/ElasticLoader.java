@@ -19,18 +19,27 @@ package us.colloquy.util;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.http.HttpHost;
 import org.elasticsearch.action.bulk.BulkItemResponse;
+import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkRequestBuilder;
 import org.elasticsearch.action.bulk.BulkResponse;
+import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.client.RequestOptions;
+import org.elasticsearch.client.RestClient;
+import org.elasticsearch.client.RestHighLevelClient;
 import org.elasticsearch.client.transport.TransportClient;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.common.xcontent.XContentType;
-import org.elasticsearch.transport.client.PreBuiltTransportClient;
 import us.colloquy.model.DiaryEntry;
 import us.colloquy.model.Letter;
 
+import java.io.IOException;
 import java.net.InetAddress;
 import java.util.List;
 import java.util.Properties;
@@ -40,78 +49,161 @@ import java.util.Properties;
  */
 public class ElasticLoader
 {
+//    public static void uploadLettersToElasticServer(Properties properties, List<Letter> letterList)
+////    {
+////        Settings settings = Settings.builder()
+////                .put("cluster.name", properties.getProperty("elastic_cluster_name")).build();
+////
+////
+////        try (TransportClient client = new PreBuiltTransportClient(settings).
+////                addTransportAddress(new TransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
+////        {
+////
+////            BulkRequestBuilder bulkRequest = client.prepareBulk();
+////
+////            //this is strait forward indexing - for test and validation just comment it out
+////            indexLetters(letterList, client, bulkRequest);
+////
+////
+////        } catch (Throwable t)
+////        {
+////            t.printStackTrace();
+////        }
+////    }
+
+
     public static void uploadLettersToElasticServer(Properties properties, List<Letter> letterList)
     {
-        Settings settings = Settings.builder()
-                .put("cluster.name", properties.getProperty("elastic_cluster_name")).build();
-
-
-        try (TransportClient client = new PreBuiltTransportClient(settings).
-                addTransportAddress(new TransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
+        if ( letterList.size() > 0 )
         {
+            try ( RestHighLevelClient client = new RestHighLevelClient(
+                    RestClient.builder(
+                            new HttpHost("localhost", 9200, "http"),
+                            new HttpHost("localhost", 9201, "http"))))
+            {
 
-            BulkRequestBuilder bulkRequest = client.prepareBulk();
+                BulkRequest request = new BulkRequest();
 
-            //this is strait forward indexing - for test and validation just comment it out
-            indexLetters(letterList, client, bulkRequest);
+                ObjectMapper ow = new ObjectMapper(); // create once, reuse
+
+                ow.enable(SerializationFeature.INDENT_OUTPUT);
+
+                for ( Letter letter : letterList )
+                {
+                        try
+                        {
+                            String json = ow.writerWithDefaultPrettyPrinter().writeValueAsString(letter);
+
+                            String name = "unk";
+
+                            if (letter.getTo().size() > 0)
+                            {
+                                name = letter.getTo().get(0).getLastName();
+
+                            }
+
+                            String id = letter.getId() + "-" + letter.getDate() + "-" + letter.getSource();
+
+                            if ( StringUtils.isNotEmpty(json) )
+                            {
+                                IndexRequest indexRequest = new IndexRequest("lntolstoy-letters", "letters", id)
+                                        .source(json, XContentType.JSON);
+
+                                request.add(new UpdateRequest("lntolstoy-letters", "letters", id)
+                                        .doc(json, XContentType.JSON).upsert(indexRequest));
+                            }
+                            else
+                            {
+                                System.out.println("empty doc: " + id.toString());
+                            }
 
 
-        } catch (Throwable t)
+                        } catch ( JsonProcessingException e )
+                        {
+                            e.printStackTrace();
+                        }
+                }
+
+                BulkResponse bulkResponse = client.bulk(request, RequestOptions.DEFAULT);
+
+                if ( bulkResponse.hasFailures() )
+                // process failures by iterating through each bulk response item
+                {
+                    System.err.println(bulkResponse.buildFailureMessage());
+
+                    for ( BulkItemResponse b : bulkResponse )
+                    {
+                        System.out.println("Error inserting id: " + b.getId());
+                        System.out.println("Failure message: " + b.getFailureMessage());
+                    }
+                }
+                else
+                {
+                    System.out.println("Bulk indexing succeeded.");
+                }
+
+            } catch ( Exception e )
+            {
+                e.printStackTrace();
+            }
+        }
+        else
         {
-            t.printStackTrace();
+            System.out.println("The list for bulk import is empty!");
         }
     }
 
-    private static void indexLetters(List<Letter> letterList, Client client, BulkRequestBuilder bulkRequest) throws JsonProcessingException
-    {
-        ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
-
-
-        for (Letter letter : letterList)
-        {
-            String json = ow.writeValueAsString(letter);
-
-            String name = "unk";
-
-            if (letter.getTo().size() > 0)
-            {
-                name = letter.getTo().get(0).getLastName();
-
-            }
-
-            String id = letter.getId() + "-" + letter.getDate() + "-" + letter.getSource();
-
-            bulkRequest.add(client.prepareIndex("tolstoy_letters", "letters", id)
-                    .setSource(json, XContentType.JSON)
-            );
-        }
-
-        BulkResponse bulkResponse = bulkRequest.get();
-
-        if (bulkResponse.hasFailures())
-        {
-            // process failures by iterating through each bulk response item
-            for (BulkItemResponse br : bulkResponse.getItems())
-            {
-                System.out.println(br.getFailureMessage());
-            }
-        }
-    }
+//    private static void indexLetters(List<Letter> letterList, Client client, BulkRequestBuilder bulkRequest) throws JsonProcessingException
+//    {
+//        ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
+//
+//
+//        for (Letter letter : letterList)
+//        {
+//            String json = ow.writeValueAsString(letter);
+//
+//            String name = "unk";
+//
+//            if (letter.getTo().size() > 0)
+//            {
+//                name = letter.getTo().get(0).getLastName();
+//
+//            }
+//
+//            String id = letter.getId() + "-" + letter.getDate() + "-" + letter.getSource();
+//
+//            bulkRequest.add(client.prepareIndex("tolstoy_letters", "letters", id)
+//                    .setSource(json, XContentType.JSON)
+//            );
+//        }
+//
+//        BulkResponse bulkResponse = bulkRequest.get();
+//
+//        if (bulkResponse.hasFailures())
+//        {
+//            // process failures by iterating through each bulk response item
+//            for (BulkItemResponse br : bulkResponse.getItems())
+//            {
+//                System.out.println(br.getFailureMessage());
+//            }
+//        }
+//    }
 
 
     public static void uploadDiariesToElasticServer(Properties properties, List<DiaryEntry> diaryEntries)
     {
-        Settings settings = Settings.builder()
-                .put("cluster.name", properties.getProperty("elastic_cluster_name")).build();
 
-        try (TransportClient client = new PreBuiltTransportClient(settings).
-                addTransportAddress(new TransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
+
+        try ( RestHighLevelClient client = new RestHighLevelClient(
+                RestClient.builder(
+                        new HttpHost("localhost", 9200, "http"),
+                        new HttpHost("localhost", 9201, "http"))))
         {
 
-            BulkRequestBuilder bulkRequest = client.prepareBulk();
+            BulkRequest request = new BulkRequest();
 
-            //this is strait forward indexing - for test and validation just comment it out
-            indexDiaries(diaryEntries, client, bulkRequest);
+
+            indexDiaries(diaryEntries, client, request);
 
 
         } catch (Throwable t)
@@ -120,7 +212,7 @@ public class ElasticLoader
         }
     }
 
-    private static void indexDiaries(List<DiaryEntry> diaryEntryList, Client client, BulkRequestBuilder bulkRequest) throws JsonProcessingException
+    private static void indexDiaries(List<DiaryEntry> diaryEntryList, RestHighLevelClient client,  BulkRequest bulkRequest) throws IOException
     {
         ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
 
@@ -130,12 +222,21 @@ public class ElasticLoader
 
             String id = diary.getId() + "-" + diary.getDate() + "-" + diary.getSource();
 
-            bulkRequest.add(client.prepareIndex("tolstoy_diaries", "diaries", id)
-                    .setSource(json, XContentType.JSON)
-            );
+            if ( StringUtils.isNotEmpty(json) )
+            {
+                IndexRequest indexRequest = new IndexRequest("lntolstoy-diaries", "diaries", id)
+                        .source(json, XContentType.JSON);
+
+                bulkRequest.add(new UpdateRequest("lntolstoy-diaries", "diaries", id)
+                        .doc(json, XContentType.JSON).upsert(indexRequest));
+            }
+            else
+            {
+                System.out.println("empty doc: " + id.toString());
+            }
         }
 
-        BulkResponse bulkResponse = bulkRequest.get();
+        BulkResponse bulkResponse = client.bulk(bulkRequest, RequestOptions.DEFAULT);
 
         if (bulkResponse.hasFailures())
         {
@@ -145,6 +246,12 @@ public class ElasticLoader
                 System.out.println(br.getFailureMessage());
             }
         }
+
+
+
+
+
+
     }
 
 }

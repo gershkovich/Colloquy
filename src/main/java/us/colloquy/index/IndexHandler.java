@@ -16,38 +16,22 @@
 
 package us.colloquy.index;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
-import org.apache.commons.collections.set.ListOrderedSet;
-import org.elasticsearch.common.transport.TransportAddress;
-import org.elasticsearch.common.xcontent.XContentType;
-import org.elasticsearch.transport.client.PreBuiltTransportClient;
-import us.colloquy.model.DiaryEntry;
-import us.colloquy.model.DocumentPointer;
-import us.colloquy.model.Letter;
-import us.colloquy.model.Person;
-import us.colloquy.util.DiaryParser;
-import us.colloquy.util.ElasticLoader;
-import us.colloquy.util.LetterParser;
-import org.apache.commons.lang.StringUtils;
-import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
-import org.elasticsearch.action.admin.indices.delete.DeleteIndexResponse;
-import org.elasticsearch.action.admin.indices.mapping.put.PutMappingResponse;
-import org.elasticsearch.action.bulk.BulkItemResponse;
-import org.elasticsearch.action.bulk.BulkRequestBuilder;
-import org.elasticsearch.action.bulk.BulkResponse;
-import org.elasticsearch.client.Client;
-import org.elasticsearch.client.transport.TransportClient;
-import org.elasticsearch.common.settings.Settings;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.http.HttpHost;
+import org.elasticsearch.client.RestClient;
+import org.elasticsearch.client.RestHighLevelClient;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.junit.Test;
-import us.colloquy.util.ResourceLoader;
+import us.colloquy.model.DiaryEntry;
+import us.colloquy.model.DocumentPointer;
+import us.colloquy.model.Letter;
+import us.colloquy.model.Person;
+import us.colloquy.util.*;
 
 import java.io.*;
-import java.net.InetAddress;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -55,7 +39,6 @@ import java.util.*;
 import java.util.stream.Stream;
 
 import static us.colloquy.util.ElasticLoader.uploadLettersToElasticServer;
-import static us.colloquy.util.ElasticLoader.uploadDiariesToElasticServer;
 
 /**
  * Created by Peter Gershkovich on 12/20/15.
@@ -89,17 +72,17 @@ public class IndexHandler
 //        person.setOriginalEntry("Толстой Софье Андрееевне");
 
 
-//        getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLettersSpecial/Pisma_k_Chertkovu_toma_87-89", true);
-//        getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLettersSpecial/Pisma_k_Chertkovu_toma_87-89", true);
-//        Person person = new Person();
-//        person.setLastName("Чертков");
-//        person.setFirstName("Владимир");
-//        person.setPaternalName("Григорьевич");
-//        person.setOriginalEntry("Черткову В.Г.");
+        getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLettersSpecial/Pisma_k_Chertkovu_toma_87-89", true);
+        getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLettersSpecial/Pisma_k_Chertkovu_toma_87-89", true);
+        Person person = new Person();
+        person.setLastName("Чертков");
+        person.setFirstName("Владимир");
+        person.setPaternalName("Григорьевич");
+        person.setOriginalEntry("Черткову В.Г.");
 
-        getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLetters", false);
-
-        Person person = null;
+//        getURIForAllLetters(documentPointers, System.getProperty("user.home") + "/Documents/Tolstoy/unzipLetters", false);
+//
+//        Person person = null;
 
         Map<String, String> toWhomMap = null;
 
@@ -183,6 +166,36 @@ public class IndexHandler
             uploadLettersToElasticServer(properties, letterList);
         }
     }
+
+
+    @Test
+    public void createLettersIndex() throws Exception
+    {
+        try (RestHighLevelClient client = new RestHighLevelClient(
+                RestClient.builder(
+                        new HttpHost("localhost", 9200, "http"),
+                        new HttpHost("localhost", 9201, "http"))))
+        {
+
+            IndexingUtils.makeIndex("lntolstoy-letters", "letters", client);
+        }
+    }
+
+
+    @Test
+    public void createDiariesIndex() throws Exception
+    {
+        try (RestHighLevelClient client = new RestHighLevelClient(
+                RestClient.builder(
+                        new HttpHost("localhost", 9200, "http"),
+                        new HttpHost("localhost", 9201, "http"))))
+        {
+
+            IndexingUtils.makeIndex("lntolstoy-diaries", "diaries", client);
+        }
+    }
+
+
 
 
     @Test
@@ -321,184 +334,6 @@ public class IndexHandler
             //exception handling left as an exercise for the reader
         }
 
-    }
-
-    @Test
-    public void mapIndex()
-    {
-        String indexName = "tolstoy_letters";
-
-//        String mapping = "{\n" +
-//                "      \"letters\": {\n" +
-//                "        \"properties\": {\n" +
-//                "          \"content\": {\n" +
-//                "            \"type\": \"string\"\n" +
-//                "          },\n" +
-//                "          \"date\": {\n" +
-//                "            \"type\": \"date\"\n" +
-////                "            \"format\": \"yyyy-MM-dd\"\n" +
-//                "          },\n" +
-//                "          \"id\": {\n" +
-//                "            \"type\": \"string\"\n" +
-//                "          },\n" +
-//                "          \"notes\": {\n" +
-//                "            \"type\": \"string\"\n" +
-//                "          },\n" +
-//                "          \"place\": {\n" +
-//                "            \"type\": \"string\"\n" +
-//                "          },\n" +
-//                "          \"to\": {\n" +
-//                "             \"properties\": {\n" +
-//                "              \"firstName\": {\n" +
-//                "                \"type\": \"string\"\n" +
-//                "              },\n" +
-//                "              \"lastName\": {\n" +
-//                "                \"type\": \"string\"\n" +
-//                "              },\n" +
-//                "              \"originalEntry\": {\n" +
-//                "                \"type\": \"string\"\n" +
-//                "              },\n" +
-//                "              \"paternalName\": {\n" +
-//                "                \"type\": \"string\"\n" +
-//                "              }\n" +
-//                "            }\n" +
-//                "          },\n" +
-//                "          \"source\": {\n" +
-//                "            \"type\": \"string\"\n" +
-//                "          }\n" +
-//                "        }\n" +
-//                "        }\n" +
-//                "      }";
-
-        String mapping = "{\"content\": {\n" +
-                "\"type\": \"text\"\n" +
-                "},\n" +
-                "\"date\": {\n" +
-                "\"type\": \"date\"\n" +
-                "},\n" +
-                "\"id\": {\n" +
-                "\"type\": \"keyword\"\n" +
-                "},\n" +
-                "\"notes\": {\n" +
-                "\"type\": \"text\"\n" +
-                "},\n" +
-                "\"place\": {\n" +
-                "\"type\": \"text\"\n" +
-                "},\n" +
-                "\"source\": {\n" +
-                "\"type\": \"text\"\n" +
-                "},\n" +
-                "\"to\": {\n" +
-                "\"properties\": {\n" +
-                "\"firstName\": {\n" +
-                "\"type\": \"text\"\n" +
-                "},\n" +
-                "\"lastName\": {\n" +
-                "\"type\": \"text\"\n" +
-                "},\n" +
-                "\"originalEntry\": {\n" +
-                "\"type\": \"text\"\n" +
-                "},\n" +
-                "\"paternalName\": {\n" +
-                "\"type\": \"text\"\n" +
-                "}\n" +
-                "}\n" +
-                "}\n" +
-                "}";
-
-
-
-
-        /*
-        I added diaries type index via sense
-        PUT /tolstoy/diaries/_mapping
-{
-   "diaries": {
-      "properties": {
-         "id": {
-            "type": "string"
-         },"date": {
-            "type": "date"
-         },"place": {
-            "type": "string"
-         },"entry": {
-            "type": "string"
-         },
-         "source": {
-            "type": "string"
-         }
-      }
-   }
-}
-
-         */
-
-
-        Properties properties = loadProperties();
-//
-//        Settings settings = Settings.settingsBuilder()
-//                .put("cluster.name", properties.getProperty("elastic_cluster_name")).build();
-//
-//
-//        try (Client client = TransportClient.builder().settings(settings).build()
-//                .addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
-//        {
-
-        Settings settings = Settings.builder()
-                .put("cluster.name", properties.getProperty("elastic_cluster_name")).build();
-
-
-        try (TransportClient client = new PreBuiltTransportClient(settings).addTransportAddress(new TransportAddress(InetAddress.getByName(properties.getProperty("elastic_ip_address")), 9300)))
-        {
-            // re-create index if it is  already exists.
-            if (client.admin().indices().prepareExists(indexName).execute().actionGet().isExists())
-            {
-                final DeleteIndexRequest deleteIndexRequest = new DeleteIndexRequest(indexName);
-
-                final DeleteIndexResponse deleteIndexResponse = client.admin().indices().delete(deleteIndexRequest).actionGet();
-
-                if (!deleteIndexResponse.isAcknowledged())
-                {
-                    System.out.println("Not deleted");
-                } else
-                {
-                    System.out.println(indexName + " is deleted ");
-                }
-            }
-
-            client.admin().indices().prepareCreate(indexName).execute().actionGet();
-
-            //  PutMappingResponse response = client.admin().indices().preparePutMapping(indexName).setType(type).setSource(mapping).execute().actionGet();
-
-
-//            PutMappingResponse response =     client.admin().indices().prepareCreate(indexName)
-//                    .addMapping("tweet", "{\n" +
-//                            "    \"tweet\": {\n" +
-//                            "      \"properties\": {\n" +
-//                            "        \"message\": {\n" +
-//                            "          \"type\": \"text\"\n" +
-//                            "        }\n" +
-//                            "      }\n" +
-//                            "    }\n" +
-//                            "  }")
-//                    .get();
-
-
-            PutMappingResponse response = client.admin().indices().preparePutMapping(indexName)
-                    .setType("letters")
-                    .setSource(mapping)
-                    .get();
-
-
-            if (!response.isAcknowledged())
-            {
-                System.out.println("Something strange happens");
-            }
-
-        } catch (Throwable t)
-        {
-            t.printStackTrace();
-        }
     }
 
     public void getURIForAllLetters(Set<DocumentPointer> uriList, String letterDirectory, boolean useOnlyNumber)

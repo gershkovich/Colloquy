@@ -22,19 +22,28 @@
 
     <entry key="productionMode">true</entry>
 
-    <entry key="upload_to_elastic">false</entry>
+    <entry key="upload_to_elastic">true</entry>
+    <entry key="export_to_json">false</entry>
 
     <entry key="email_sender">peter.gershkovich@yale.edu</entry>
 
     <entry key="email_server">mail.yale.edu</entry>
 
-    <!--Prod configuration-->
+    <!--Prod configuration amazon-->
     <!--<entry key="elastic_ip_address">colloquy.us</entry>-->
     <!--<entry key="elastic_cluster_name">colloquy</entry>-->
 
-    <!--Test configuration-->
-    <entry key="elastic_ip_address">127.0.0.1</entry>
+    <!--Prod configuration CMU-->
+
+    <entry key="elastic_ip_address">dh-modl.hss.cmu.edu</entry>
     <entry key="elastic_cluster_name">colloquy</entry>
 
+    <!--<entry key="elastic_ip_address">52.87.214.246</entry>-->
+    <!--<entry key="elastic_cluster_name">colloquy</entry>-->
+
+
+    <!--Test configuration-->
+    <!--<entry key="elastic_ip_address">127.0.0.1</entry>-->
+    <!--<entry key="elastic_cluster_name">colloquy</entry>-->
 
 </properties>
